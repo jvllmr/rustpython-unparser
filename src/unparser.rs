@@ -1,6 +1,3 @@
-use std::fmt;
-use std::io::Write;
-
 use rustpython_ast::{
     text_size::TextRange, Alias, Arg, Arguments, BoolOp, CmpOp, Comprehension, ExceptHandler,
     ExceptHandlerExceptHandler, Expr, ExprAttribute, ExprAwait, ExprBinOp, ExprBoolOp, ExprCall,
@@ -16,9 +13,103 @@ use rustpython_ast::{
     StmtTryStar, StmtTypeAlias, StmtWhile, StmtWith, TypeParam, TypeParamParamSpec,
     TypeParamTypeVar, TypeParamTypeVarTuple, UnaryOp, WithItem,
 };
+use rustpython_ast::{BoolOpAnd, Int, Node};
+use std::any::{Any, TypeId};
+use std::collections::binary_heap::Iter;
+use std::fmt::Formatter;
+use std::io::Write;
+use std::ops::Deref;
+use std::{fmt, marker::PhantomData};
 
-pub trait Unparser<'a, W = fmt::Formatter<'a>, R = TextRange> {
-    fn unparse_stmt(&mut self, node: Stmt<R>) {
+fn get_precedence(node: &Expr<TextRange>) -> usize {
+    match node {
+        Expr::NamedExpr(_) => 1,
+        Expr::Tuple(_) => 2,
+        Expr::Yield(_) => 3,
+        Expr::YieldFrom(_) => 3,
+        Expr::IfExp(_) => 4,
+        Expr::Lambda(_) => 4,
+        Expr::BoolOp(data) => match data.op {
+            BoolOp::Or => 5,
+            BoolOp::And => 6,
+        },
+        Expr::UnaryOp(data) => match data.op {
+            UnaryOp::Not => 7,
+            UnaryOp::UAdd => 15,
+            UnaryOp::USub => 15,
+            UnaryOp::Invert => 15,
+        },
+        Expr::Compare(_) => 8,
+        Expr::BinOp(data) => match data.op {
+            Operator::BitOr => 9,
+            Operator::BitXor => 10,
+            Operator::BitAnd => 11,
+            Operator::LShift => 12,
+            Operator::RShift => 12,
+            Operator::Add => 13,
+            Operator::Sub => 13,
+            Operator::Div => 14,
+            Operator::FloorDiv => 14,
+            Operator::Mult => 14,
+            Operator::MatMult => 14,
+            Operator::Mod => 14,
+            Operator::Pow => 16,
+        },
+        Expr::Await(_) => 17,
+        _ => 4,
+    }
+}
+
+pub struct Unparser<'a> {
+    fmt: Formatter<'a>,
+    _indent: usize,
+    _in_try_star: bool,
+    _precedence_level: usize,
+}
+
+impl<'a> Unparser<'a> {
+    fn new(fmt: Formatter<'a>) -> Self {
+        Unparser {
+            _in_try_star: false,
+            _indent: 0,
+            _precedence_level: 0,
+            fmt,
+        }
+    }
+
+    fn fill(&mut self, str_: &str) {
+        self.write_str(&("\n".to_owned() + &" ".repeat(self._indent * 4) + str_));
+    }
+
+    fn write_str(&mut self, str_: &str) {
+        self.fmt.write_str(str_);
+    }
+
+    fn block<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut Self),
+    {
+        self._indent += 1;
+        f(self);
+        self._indent -= 1;
+    }
+
+    fn delimit_precedence<F>(&mut self, node: &Expr<TextRange>, f: F)
+    where
+        F: FnOnce(&mut Self),
+    {
+        self._precedence_level = get_precedence(node);
+        let should_delimit = get_precedence(node) > self._precedence_level;
+        if should_delimit {
+            self.write_str("(");
+        }
+        f(self);
+        if should_delimit {
+            self.write_str(")");
+        }
+    }
+
+    fn unparse_stmt(&mut self, node: &Stmt<TextRange>) {
         match node {
             Stmt::FunctionDef(data) => self.unparse_stmt_function_def(data),
             Stmt::AsyncFunctionDef(data) => self.unparse_stmt_async_function_def(data),
@@ -51,280 +142,482 @@ pub trait Unparser<'a, W = fmt::Formatter<'a>, R = TextRange> {
         }
     }
 
-    fn unparse_stmt_pass(&mut self, node: StmtPass<R>) {}
+    fn unparse_stmt_pass(&mut self, node: &StmtPass<TextRange>) {
+        self.fill("pass");
+    }
 
-    fn unparse_stmt_break(&mut self, node: StmtBreak<R>) {}
+    fn unparse_stmt_break(&mut self, node: &StmtBreak<TextRange>) {
+        self.fill("break");
+    }
 
-    fn unparse_stmt_continue(&mut self, node: StmtContinue<R>) {}
+    fn unparse_stmt_continue(&mut self, node: &StmtContinue<TextRange>) {
+        self.fill("continue");
+    }
 
-    fn unparse_stmt_function_def(&mut self, node: StmtFunctionDef<R>) {
-        {
-            let value = node.args;
-            self.unparse_arguments(*value);
+    fn unparse_stmt_function_def(&mut self, node: &StmtFunctionDef<TextRange>) {
+        for decorator in &node.decorator_list {
+            self.fill("@");
+            self.unparse_expr(&decorator);
         }
-        for value in node.body {
-            self.unparse_stmt(value);
+        self.fill("def ");
+        self.write_str(&node.name);
+        if node.type_params.len() > 0 {
+            self.write_str("[");
+            let mut type_params_iter = node.type_params.iter().peekable();
+            while let Some(type_param) = type_params_iter.next() {
+                self.unparse_type_param(type_param);
+                if type_params_iter.peek().is_some() {
+                    self.write_str(", ");
+                }
+            }
+            self.write_str("]");
         }
-        for value in node.decorator_list {
+        self.write_str("(");
+
+        self.unparse_arguments(&node.args);
+
+        self.write_str(")");
+        if let Some(returns) = &node.returns {
+            self.write_str(" -> ");
+            self.unparse_expr(&returns);
+        }
+        self.write_str(":");
+        self.block(|block_self| {
+            for value in &node.body {
+                block_self.unparse_stmt(&value);
+            }
+        });
+    }
+
+    fn unparse_stmt_async_function_def(&mut self, node: &StmtAsyncFunctionDef<TextRange>) {
+        for decorator in &node.decorator_list {
+            self.fill("@");
+            self.unparse_expr(&decorator);
+        }
+        self.fill("async def ");
+        self.write_str(&node.name);
+        if node.type_params.len() > 0 {
+            self.write_str("[");
+            let mut type_params_iter = node.type_params.iter().peekable();
+            while let Some(type_param) = type_params_iter.next() {
+                self.unparse_type_param(type_param);
+                if type_params_iter.peek().is_some() {
+                    self.write_str(", ");
+                }
+            }
+            self.write_str("]");
+        }
+        self.write_str("(");
+
+        self.unparse_arguments(&node.args);
+
+        self.write_str(")");
+        if let Some(returns) = &node.returns {
+            self.write_str(" -> ");
+            self.unparse_expr(&returns);
+        }
+        self.write_str(":");
+        self.block(|block_self| {
+            for value in &node.body {
+                block_self.unparse_stmt(&value);
+            }
+        });
+    }
+
+    fn unparse_stmt_class_def(&mut self, node: &StmtClassDef<TextRange>) {
+        for decorator in &node.decorator_list {
+            self.fill("@");
+            self.unparse_expr(decorator);
+        }
+
+        self.fill("class");
+        self.write_str(&node.name);
+
+        if node.type_params.len() > 0 {
+            self.write_str("[");
+            let mut type_params_iter = node.type_params.iter().peekable();
+            while let Some(type_param) = type_params_iter.next() {
+                self.unparse_type_param(type_param);
+                if type_params_iter.peek().is_some() {
+                    self.write_str(", ");
+                }
+            }
+            self.write_str("]");
+        }
+
+        self.write_str("(");
+
+        let mut bases_iter = node.bases.iter().peekable();
+        let mut keywords_iter = node.keywords.iter().peekable();
+
+        while let Some(base) = bases_iter.next() {
+            self.unparse_expr(base);
+            if bases_iter.peek().is_some() || keywords_iter.peek().is_some() {
+                self.write_str(", ");
+            }
+        }
+        while let Some(keyword) = keywords_iter.next() {
+            self.unparse_keyword(keyword);
+            if keywords_iter.peek().is_some() {
+                self.write_str(", ");
+            }
+        }
+        self.write_str("):");
+
+        self.block(|block_self| {
+            for value in &node.body {
+                block_self.unparse_stmt(&value);
+            }
+        });
+    }
+
+    fn unparse_stmt_return(&mut self, node: &StmtReturn<TextRange>) {
+        self.fill("return ");
+        if let Some(value) = &node.value {
+            self.unparse_expr(&value);
+        }
+    }
+    fn unparse_stmt_delete(&mut self, node: &StmtDelete<TextRange>) {
+        self.fill("del ");
+        let mut targets_iter = node.targets.iter().peekable();
+
+        while let Some(target) = targets_iter.next() {
+            self.unparse_expr(target);
+            if targets_iter.peek().is_some() {
+                self.write_str(", ");
+            }
+        }
+    }
+
+    fn unparse_stmt_assign(&mut self, node: &StmtAssign<TextRange>) {
+        let mut targets_iter = node.targets.iter().peekable();
+        self.fill("");
+        while let Some(target) = targets_iter.next() {
+            self.unparse_expr(target);
+            if targets_iter.peek().is_some() {
+                self.write_str(", ");
+            }
+        }
+        self.write_str(" = ");
+        self.unparse_expr(&node.value);
+        if node.type_comment.is_some() {
+            self.write_str(&node.type_comment.as_ref().unwrap());
+        }
+    }
+
+    fn unparse_stmt_type_alias(&mut self, node: &StmtTypeAlias<TextRange>) {
+        self.fill("");
+        self.unparse_expr(&node.name);
+        if node.type_params.len() > 0 {
+            self.write_str("[");
+            let mut type_params_iter = node.type_params.iter().peekable();
+            while let Some(type_param) = type_params_iter.next() {
+                self.unparse_type_param(type_param);
+                if type_params_iter.peek().is_some() {
+                    self.write_str(", ");
+                }
+            }
+            self.write_str("]");
+        }
+        self.write_str(": ");
+        self.unparse_expr(&node.value);
+    }
+
+    fn unparse_stmt_aug_assign(&mut self, node: &StmtAugAssign<TextRange>) {
+        self.fill("");
+        self.unparse_expr(&node.target);
+        self.write_str(" ");
+        self.unparse_operator(&node.op);
+        self.write_str("= ");
+        self.unparse_expr(&node.value);
+    }
+
+    fn unparse_stmt_ann_assign(&mut self, node: &StmtAnnAssign<TextRange>) {
+        self.fill("");
+        self.unparse_expr(&node.target);
+        self.write_str(": ");
+        self.unparse_expr(&node.annotation);
+        self.write_str(" = ");
+        if let Some(value) = &node.value {
             self.unparse_expr(value);
         }
-        if let Some(value) = node.returns {
-            self.unparse_expr(*value);
+    }
+
+    fn unparse_stmt_for(&mut self, node: &StmtFor<TextRange>) {
+        self.fill("for ");
+        self.unparse_expr(&node.target);
+        self.write_str(" in ");
+        self.unparse_expr(&node.iter);
+        self.write_str(":");
+        self.block(|block_self| {
+            for value in &node.body {
+                block_self.unparse_stmt(value);
+            }
+        });
+        if (node.orelse.len() > 0) {
+            self.fill("else:");
+            self.block(|block_self| {
+                for stmt in &node.orelse {
+                    block_self.unparse_stmt(stmt);
+                }
+            });
         }
-        for value in node.type_params {
-            self.unparse_type_param(value);
+    }
+    fn unparse_stmt_async_for(&mut self, node: &StmtAsyncFor<TextRange>) {
+        self.fill("async for ");
+        self.unparse_expr(&node.target);
+        self.write_str(" in ");
+        self.unparse_expr(&node.iter);
+        self.write_str(":");
+        self.block(|block_self| {
+            for value in &node.body {
+                block_self.unparse_stmt(value);
+            }
+        });
+        if (node.orelse.len() > 0) {
+            self.fill("else:");
+            self.block(|block_self| {
+                for stmt in &node.orelse {
+                    block_self.unparse_stmt(stmt);
+                }
+            });
+        }
+    }
+    fn unparse_stmt_while(&mut self, node: &StmtWhile<TextRange>) {
+        self.fill("while ");
+        self.unparse_expr(&node.test);
+        self.write_str(":");
+        self.block(|block_self| {
+            for stmt in &node.body {
+                block_self.unparse_stmt(stmt);
+            }
+        });
+
+        if (node.orelse.len() > 0) {
+            self.fill("else:");
+            self.block(|block_self| {
+                for stmt in &node.orelse {
+                    block_self.unparse_stmt(stmt);
+                }
+            });
         }
     }
 
-    fn unparse_stmt_async_function_def(&mut self, node: StmtAsyncFunctionDef<R>) {
-        {
-            let value = node.args;
-            self.unparse_arguments(*value);
-        }
-        for value in node.body {
-            self.unparse_stmt(value);
-        }
-        for value in node.decorator_list {
-            self.unparse_expr(value);
-        }
-        if let Some(value) = node.returns {
-            self.unparse_expr(*value);
-        }
-        for value in node.type_params {
-            self.unparse_type_param(value);
-        }
-    }
-
-    fn unparse_stmt_class_def(&mut self, node: StmtClassDef<R>) {
-        for value in node.bases {
-            self.unparse_expr(value);
-        }
-        for value in node.keywords {
-            self.unparse_keyword(value);
-        }
-        for value in node.body {
-            self.unparse_stmt(value);
-        }
-        for value in node.decorator_list {
-            self.unparse_expr(value);
-        }
-        for value in node.type_params {
-            self.unparse_type_param(value);
+    fn unparse_stmt_if(&mut self, node: &StmtIf<TextRange>) {
+        self.fill("if ");
+        self.unparse_expr(&node.test);
+        self.write_str(":");
+        self.block(|block_self| {
+            for stmt in &node.body {
+                block_self.unparse_stmt(stmt);
+            }
+        });
+        match node.orelse.as_slice() {
+            [Stmt::If(inner_if)] => {
+                self.fill("elif ");
+                self.unparse_expr(&inner_if.test);
+                self.write_str(":");
+                self.block(|block_self| {
+                    for stmt in &inner_if.body {
+                        block_self.unparse_stmt(stmt);
+                    }
+                });
+            }
+            [] => {}
+            _ => {
+                self.fill("else:");
+                self.block(|block_self| {
+                    for stmt in &node.orelse {
+                        block_self.unparse_stmt(stmt);
+                    }
+                });
+            }
         }
     }
 
-    fn unparse_stmt_return(&mut self, node: StmtReturn<R>) {
-        if let Some(value) = node.value {
-            self.unparse_expr(*value);
+    fn unparse_stmt_with(&mut self, node: &StmtWith<TextRange>) {
+        self.fill("with ");
+        let mut items_iter = node.items.iter().peekable();
+        while let Some(item) = items_iter.next() {
+            self.unparse_withitem(item);
+            if items_iter.peek().is_some() {
+                self.write_str(", ");
+            }
         }
+        self.write_str(":");
+        self.block(|block_self| {
+            for stmt in &node.body {
+                block_self.unparse_stmt(stmt);
+            }
+        });
     }
-    fn unparse_stmt_delete(&mut self, node: StmtDelete<R>) {
-        for value in node.targets {
-            self.unparse_expr(value);
+    fn unparse_stmt_async_with(&mut self, node: &StmtAsyncWith<TextRange>) {
+        self.fill("async with ");
+        let mut items_iter = node.items.iter().peekable();
+        while let Some(item) = items_iter.next() {
+            self.unparse_withitem(item);
+            if items_iter.peek().is_some() {
+                self.write_str(", ");
+            }
+        }
+        self.write_str(":");
+        self.block(|block_self| {
+            for stmt in &node.body {
+                block_self.unparse_stmt(stmt);
+            }
+        })
+    }
+
+    fn unparse_stmt_match(&mut self, node: &StmtMatch<TextRange>) {
+        self.fill("match ");
+        self.unparse_expr(&node.subject);
+        self.write_str(":");
+        self.block(|block_self| {
+            for case in &node.cases {
+                block_self.unparse_match_case(case);
+            }
+        });
+    }
+
+    fn unparse_stmt_raise(&mut self, node: &StmtRaise<TextRange>) {
+        self.fill("raise ");
+        if let Some(exc) = &node.exc {
+            self.unparse_expr(exc);
+        }
+        if let Some(cause) = &node.cause {
+            self.write_str(" from ");
+            self.unparse_expr(cause);
         }
     }
 
-    fn unparse_stmt_assign(&mut self, node: StmtAssign<R>) {
-        for value in node.targets {
-            self.unparse_expr(value);
+    fn unparse_stmt_try(&mut self, node: &StmtTry<TextRange>) {
+        let prev_try_star = self._in_try_star;
+        self._in_try_star = false;
+        self.fill("try:");
+        self.block(|block_self| {
+            for stmt in &node.body {
+                block_self.unparse_stmt(stmt);
+            }
+        });
+
+        for handler in &node.handlers {
+            self.unparse_excepthandler(handler);
         }
-        {
-            let value = node.value;
-            self.unparse_expr(*value);
+
+        if node.orelse.len() > 0 {
+            self.fill("else:");
+            self.block(|block_self| {
+                for stmt in &node.orelse {
+                    block_self.unparse_stmt(stmt);
+                }
+            });
+        }
+
+        if node.finalbody.len() > 0 {
+            self.fill("finally:");
+            self.block(|block_self| {
+                for stmt in &node.finalbody {
+                    block_self.unparse_stmt(stmt);
+                }
+            });
+        }
+        self._in_try_star = prev_try_star;
+    }
+    fn unparse_stmt_try_star(&mut self, node: &StmtTryStar<TextRange>) {
+        let prev_try_star = self._in_try_star;
+        self._in_try_star = true;
+        self.fill("try:");
+        self.block(|block_self| {
+            for stmt in &node.body {
+                block_self.unparse_stmt(stmt);
+            }
+        });
+
+        for handler in &node.handlers {
+            self.unparse_excepthandler(handler);
+        }
+
+        if node.orelse.len() > 0 {
+            self.fill("else:");
+            self.block(|block_self| {
+                for stmt in &node.orelse {
+                    block_self.unparse_stmt(stmt);
+                }
+            });
+        }
+
+        if node.finalbody.len() > 0 {
+            self.fill("finally:");
+            self.block(|block_self| {
+                for stmt in &node.finalbody {
+                    block_self.unparse_stmt(stmt);
+                }
+            });
+        }
+        self._in_try_star = prev_try_star;
+    }
+    fn unparse_stmt_assert(&mut self, node: &StmtAssert<TextRange>) {
+        self.fill("assert ");
+        self.unparse_expr(&node.test);
+        if let Some(msg) = &node.msg {
+            self.write_str(", ");
+            self.unparse_expr(msg);
         }
     }
 
-    fn unparse_stmt_type_alias(&mut self, node: StmtTypeAlias<R>) {
-        {
-            let value = node.name;
-            self.unparse_expr(*value);
+    fn unparse_stmt_import(&mut self, node: &StmtImport<TextRange>) {
+        self.fill("import ");
+        let mut iter = node.names.iter().peekable();
+        while let Some(name) = iter.next() {
+            self.unparse_alias(name);
+            if (iter.peek().is_some()) {
+                self.write_str(", ");
+            }
         }
-        for value in node.type_params {
-            self.unparse_type_param(value);
+    }
+    fn unparse_stmt_import_from(&mut self, node: &StmtImportFrom<TextRange>) {
+        self.fill("from ");
+        let level = node.level.unwrap_or(Int::new(0));
+        self.write_str(&".".repeat(level.to_usize()));
+        let module = match &node.module {
+            Some(name) => name.to_string(),
+            None => "".to_string(),
+        };
+        self.write_str(&(module + " import "));
+        let mut iter = node.names.iter().peekable();
+        while let Some(name) = iter.next() {
+            self.unparse_alias(name);
+            if (iter.peek().is_some()) {
+                self.write_str(", ");
+            }
         }
-        {
-            let value = node.value;
-            self.unparse_expr(*value);
+    }
+    fn unparse_stmt_global(&mut self, node: &StmtGlobal<TextRange>) {
+        self.fill("global ");
+        let mut iter = node.names.iter().peekable();
+        while let Some(name) = iter.next() {
+            self.write_str(name);
+            if (iter.peek().is_some()) {
+                self.write_str(", ");
+            }
         }
+    }
+    fn unparse_stmt_nonlocal(&mut self, node: &StmtNonlocal<TextRange>) {
+        self.fill("nonlocal ");
+        let mut iter = node.names.iter().peekable();
+        while let Some(name) = iter.next() {
+            self.write_str(name);
+            if (iter.peek().is_some()) {
+                self.write_str(", ");
+            }
+        }
+    }
+    fn unparse_stmt_expr(&mut self, node: &StmtExpr<TextRange>) {
+        self.fill("");
+        self.unparse_expr(&node.value);
     }
 
-    fn unparse_stmt_aug_assign(&mut self, node: StmtAugAssign<R>) {
-        {
-            let value = node.target;
-            self.unparse_expr(*value);
-        }
-        {
-            let value = node.value;
-            self.unparse_expr(*value);
-        }
-    }
-
-    fn unparse_stmt_ann_assign(&mut self, node: StmtAnnAssign<R>) {
-        {
-            let value = node.target;
-            self.unparse_expr(*value);
-        }
-        {
-            let value = node.annotation;
-            self.unparse_expr(*value);
-        }
-        if let Some(value) = node.value {
-            self.unparse_expr(*value);
-        }
-    }
-
-    fn unparse_stmt_for(&mut self, node: StmtFor<R>) {
-        {
-            let value = node.target;
-            self.unparse_expr(*value);
-        }
-        {
-            let value = node.iter;
-            self.unparse_expr(*value);
-        }
-        for value in node.body {
-            self.unparse_stmt(value);
-        }
-        for value in node.orelse {
-            self.unparse_stmt(value);
-        }
-    }
-    fn unparse_stmt_async_for(&mut self, node: StmtAsyncFor<R>) {
-        {
-            let value = node.target;
-            self.unparse_expr(*value);
-        }
-        {
-            let value = node.iter;
-            self.unparse_expr(*value);
-        }
-        for value in node.body {
-            self.unparse_stmt(value);
-        }
-        for value in node.orelse {
-            self.unparse_stmt(value);
-        }
-    }
-    fn unparse_stmt_while(&mut self, node: StmtWhile<R>) {
-        {
-            let value = node.test;
-            self.unparse_expr(*value);
-        }
-        for value in node.body {
-            self.unparse_stmt(value);
-        }
-        for value in node.orelse {
-            self.unparse_stmt(value);
-        }
-    }
-
-    fn unparse_stmt_if(&mut self, node: StmtIf<R>) {
-        {
-            let value = node.test;
-            self.unparse_expr(*value);
-        }
-        for value in node.body {
-            self.unparse_stmt(value);
-        }
-        for value in node.orelse {
-            self.unparse_stmt(value);
-        }
-    }
-
-    fn unparse_stmt_with(&mut self, node: StmtWith<R>) {
-        for value in node.items {
-            self.unparse_withitem(value);
-        }
-        for value in node.body {
-            self.unparse_stmt(value);
-        }
-    }
-    fn unparse_stmt_async_with(&mut self, node: StmtAsyncWith<R>) {
-        for value in node.items {
-            self.unparse_withitem(value);
-        }
-        for value in node.body {
-            self.unparse_stmt(value);
-        }
-    }
-
-    fn unparse_stmt_match(&mut self, node: StmtMatch<R>) {
-        {
-            let value = node.subject;
-            self.unparse_expr(*value);
-        }
-        for value in node.cases {
-            self.unparse_match_case(value);
-        }
-    }
-
-    fn unparse_stmt_raise(&mut self, node: StmtRaise<R>) {
-        if let Some(value) = node.exc {
-            self.unparse_expr(*value);
-        }
-        if let Some(value) = node.cause {
-            self.unparse_expr(*value);
-        }
-    }
-
-    fn unparse_stmt_try(&mut self, node: StmtTry<R>) {
-        for value in node.body {
-            self.unparse_stmt(value);
-        }
-        for value in node.handlers {
-            self.unparse_excepthandler(value);
-        }
-        for value in node.orelse {
-            self.unparse_stmt(value);
-        }
-        for value in node.finalbody {
-            self.unparse_stmt(value);
-        }
-    }
-    fn unparse_stmt_try_star(&mut self, node: StmtTryStar<R>) {
-        for value in node.body {
-            self.unparse_stmt(value);
-        }
-        for value in node.handlers {
-            self.unparse_excepthandler(value);
-        }
-        for value in node.orelse {
-            self.unparse_stmt(value);
-        }
-        for value in node.finalbody {
-            self.unparse_stmt(value);
-        }
-    }
-    fn unparse_stmt_assert(&mut self, node: StmtAssert<R>) {
-        {
-            let value = node.test;
-            self.unparse_expr(*value);
-        }
-        if let Some(value) = node.msg {
-            self.unparse_expr(*value);
-        }
-    }
-
-    fn unparse_stmt_import(&mut self, node: StmtImport<R>) {
-        for value in node.names {
-            self.unparse_alias(value);
-        }
-    }
-    fn unparse_stmt_import_from(&mut self, node: StmtImportFrom<R>) {
-        for value in node.names {
-            self.unparse_alias(value);
-        }
-    }
-    fn unparse_stmt_global(&mut self, node: StmtGlobal<R>) {}
-    fn unparse_stmt_nonlocal(&mut self, node: StmtNonlocal<R>) {}
-    fn unparse_stmt_expr(&mut self, node: StmtExpr<R>) {
-        {
-            let value = node.value;
-            self.unparse_expr(*value);
-        }
-    }
-
-    fn unparse_expr(&mut self, node: Expr<R>) {
+    fn unparse_expr(&mut self, node: &Expr<TextRange>) {
         match node {
             Expr::BoolOp(data) => self.unparse_expr_bool_op(data),
             Expr::NamedExpr(data) => self.unparse_expr_named_expr(data),
@@ -356,191 +649,267 @@ pub trait Unparser<'a, W = fmt::Formatter<'a>, R = TextRange> {
         }
     }
 
-    fn unparse_expr_bool_op(&mut self, node: ExprBoolOp<R>) {
-        for value in node.values {
+    fn unparse_expr_bool_op(&mut self, node: &ExprBoolOp<TextRange>) {
+        let prev_precedence_level = self._precedence_level;
+        let operator = match node.op {
+            BoolOp::And => " and ",
+            BoolOp::Or => " or ",
+        };
+
+        let enum_member = Expr::BoolOp(node.to_owned());
+
+        let mut values_iter = node.values.iter().peekable();
+        self.delimit_precedence(&enum_member, |block_self| {
+            while let Some(expr) = values_iter.next() {
+                block_self._precedence_level += 1;
+                block_self.unparse_expr(expr);
+                if values_iter.peek().is_some() {
+                    block_self.write_str(&operator);
+                }
+            }
+        });
+
+        self._precedence_level = prev_precedence_level
+    }
+
+    fn unparse_expr_named_expr(&mut self, node: &ExprNamedExpr<TextRange>) {
+        let enum_member = Expr::NamedExpr(node.to_owned());
+        self.delimit_precedence(&enum_member, |block_self| {
+            block_self.unparse_expr(&node.target);
+            block_self.write_str(" := ");
+            block_self.unparse_expr(&node.value);
+        });
+    }
+
+    fn unparse_expr_bin_op(&mut self, node: &ExprBinOp<TextRange>) {
+        let enum_member = Expr::BinOp(node.to_owned());
+        let operator = match node.op {
+            Operator::Add => " + ",
+            Operator::Sub => " - ",
+            Operator::BitOr => " | ",
+            Operator::BitAnd => " & ",
+            Operator::BitXor => " ^ ",
+            Operator::Div => " / ",
+            Operator::FloorDiv => " // ",
+            Operator::LShift => " << ",
+            Operator::MatMult => " @ ",
+            Operator::Mod => " % ",
+            Operator::Pow => " ** ",
+            Operator::RShift => " >> ",
+            Operator::Mult => " * ",
+        };
+        self.delimit_precedence(&enum_member, |block_self| {
+            block_self.unparse_expr(&node.left);
+            block_self.write_str(operator);
+            block_self.unparse_expr(&node.right);
+        });
+    }
+
+    fn unparse_expr_unary_op(&mut self, node: &ExprUnaryOp<TextRange>) {
+        let enum_member = Expr::UnaryOp(node.to_owned());
+        let operator = match node.op {
+            UnaryOp::Invert => "~",
+            UnaryOp::Not => "not ",
+            UnaryOp::UAdd => "+",
+            UnaryOp::USub => "-",
+        };
+
+        self.delimit_precedence(&enum_member, |block_self| {
+            block_self.write_str(&operator);
+            block_self.unparse_expr(&node.operand)
+        });
+    }
+    fn unparse_expr_lambda(&mut self, node: &ExprLambda<TextRange>) {
+        let enum_member = Expr::Lambda(node.to_owned());
+
+        self.delimit_precedence(&enum_member, |block_self| {
+            block_self.write_str("lambda ");
+            block_self.unparse_arguments(&node.args);
+            block_self.write_str(": ");
+            block_self.unparse_expr(&node.body);
+        });
+    }
+    fn unparse_expr_if_exp(&mut self, node: &ExprIfExp<TextRange>) {
+        let enum_member = Expr::IfExp(node.to_owned());
+        self.delimit_precedence(&enum_member, |block_self| {
+            block_self.unparse_expr(&node.body);
+            block_self.write_str(" if ");
+            block_self.unparse_expr(&node.test);
+            block_self.write_str(" else ");
+            block_self.unparse_expr(&node.orelse);
+        });
+    }
+
+    fn unparse_expr_dict(&mut self, node: &ExprDict<TextRange>) {
+        let mut zipped = node.keys.iter().zip(node.values.iter()).peekable();
+
+        self.write_str("{");
+        while let Some((key, value)) = zipped.next() {
+            match key {
+                Some(key_value) => {
+                    self.unparse_expr(key_value);
+                    self.write_str(": ");
+                }
+                None => {
+                    self.write_str("**");
+                }
+            }
             self.unparse_expr(value);
+            if zipped.peek().is_some() {
+                self.write_str(", ");
+            }
+        }
+        self.write_str("}");
+    }
+
+    fn unparse_expr_set(&mut self, node: &ExprSet<TextRange>) {
+        if node.elts.len() > 0 {
+            self.write_str("{");
+            let mut elts_iter = node.elts.iter().peekable();
+            while let Some(expr) = elts_iter.next() {
+                self.unparse_expr(expr);
+                if elts_iter.peek().is_some() {
+                    self.write_str(", ");
+                }
+            }
+            self.write_str("}");
+        } else {
+            self.write_str("{*()}");
         }
     }
 
-    fn unparse_expr_named_expr(&mut self, node: ExprNamedExpr<R>) {
-        {
-            let value = node.target;
-            self.unparse_expr(*value);
+    fn unparse_expr_list_comp(&mut self, node: &ExprListComp<TextRange>) {
+        self.write_str("[");
+        self.unparse_expr(&node.elt);
+        for generator in &node.generators {
+            self.unparse_comprehension(generator);
         }
+        self.write_str("]");
+    }
+
+    fn unparse_expr_set_comp(&mut self, node: &ExprSetComp<TextRange>) {
+        self.write_str("{");
+        self.unparse_expr(&node.elt);
+
+        for generator in &node.generators {
+            self.unparse_comprehension(generator);
+        }
+        self.write_str("}");
+    }
+
+    fn unparse_expr_dict_comp(&mut self, node: &ExprDictComp<TextRange>) {
+        self.write_str("{");
+        self.unparse_expr(&node.key);
+        self.write_str(": ");
+        self.unparse_expr(&node.value);
+
+        for generator in &node.generators {
+            self.unparse_comprehension(generator);
+        }
+    }
+
+    fn unparse_expr_generator_exp(&mut self, node: &ExprGeneratorExp<TextRange>) {
+        self.unparse_expr(&node.elt);
+
+        for generator in &node.generators {
+            self.unparse_comprehension(generator);
+        }
+    }
+
+    fn unparse_expr_await(&mut self, node: &ExprAwait<TextRange>) {
+        let enum_member = Expr::Await(node.to_owned());
+        self.delimit_precedence(&enum_member, |block_self| {
+            block_self.write_str("await ");
+            block_self.unparse_expr(&node.value);
+        });
+    }
+
+    fn unparse_expr_yield(&mut self, node: &ExprYield<TextRange>) {
+        let enum_member = Expr::Yield(node.to_owned());
+        self.delimit_precedence(&enum_member, |block_self| {
+            block_self.write_str("yield");
+            if let Some(expr) = &node.value {
+                block_self.write_str(" ");
+                block_self.unparse_expr(expr);
+            }
+        });
+    }
+
+    fn unparse_expr_yield_from(&mut self, node: &ExprYieldFrom<TextRange>) {
+        let enum_member = Expr::YieldFrom(node.to_owned());
+        self.delimit_precedence(&enum_member, |block_self| {
+            block_self.write_str("yield from ");
+
+            block_self.unparse_expr(&node.value)
+        });
+    }
+
+    fn unparse_expr_compare(&mut self, node: &ExprCompare<TextRange>) {
+        let enum_member = Expr::Compare(node.to_owned());
+        let zipped = node.ops.iter().zip(node.comparators.iter());
+        self.delimit_precedence(&enum_member, |block_self| {
+            block_self.unparse_expr(&node.left);
+            for (op, comp) in zipped {
+                let operator = match op {
+                    CmpOp::Eq => " == ",
+                    CmpOp::Gt => " > ",
+                    CmpOp::GtE => " >= ",
+                    CmpOp::In => " in ",
+                    CmpOp::Is => " is ",
+                    CmpOp::IsNot => " is not ",
+                    CmpOp::Lt => " < ",
+                    CmpOp::LtE => " <= ",
+                    CmpOp::NotEq => " != ",
+                    CmpOp::NotIn => " not in ",
+                };
+                block_self.write_str(&operator);
+                block_self.unparse_expr(comp);
+            }
+        });
+    }
+
+    fn unparse_expr_call(&mut self, node: &ExprCall<TextRange>) {
+        self.unparse_expr(&node.func);
+        let mut args_iter = node.args.iter().peekable();
+        let mut keywords_iter = node.keywords.iter().peekable();
+        while let Some(arg) = args_iter.next() {
+            self.unparse_expr(arg);
+            if args_iter.peek().is_some() || keywords_iter.peek().is_some() {
+                self.write_str(", ");
+            }
+        }
+        while let Some(keyword) = keywords_iter.next() {
+            self.unparse_keyword(keyword);
+            if keywords_iter.peek().is_some() {
+                self.write_str(", ");
+            }
+        }
+    }
+
+    fn unparse_expr_formatted_value(&mut self, node: &ExprFormattedValue<TextRange>) {
+        // TODO
+        self.write_str("{ ");
+        self.unparse_expr(&node.value);
+
+        if let Some(format_spec) = &node.format_spec {
+            self.write_str(":");
+            self.unparse_expr(format_spec);
+        }
+        self.write_str(" }");
+    }
+
+    fn unparse_expr_joined_str(&mut self, node: &ExprJoinedStr<TextRange>) {
+        // TODO
+    }
+    fn unparse_expr_constant(&mut self, node: &ExprConstant<TextRange>) {}
+
+    fn unparse_expr_attribute(&mut self, node: &ExprAttribute<TextRange>) {
         {
             let value = node.value;
             self.unparse_expr(*value);
         }
     }
-
-    fn unparse_expr_bin_op(&mut self, node: ExprBinOp<R>) {
-        {
-            let value = node.left;
-            self.unparse_expr(*value);
-        }
-        {
-            let value = node.right;
-            self.unparse_expr(*value);
-        }
-    }
-
-    fn unparse_expr_unary_op(&mut self, node: ExprUnaryOp<R>) {
-        {
-            let value = node.operand;
-            self.unparse_expr(*value);
-        }
-    }
-    fn unparse_expr_lambda(&mut self, node: ExprLambda<R>) {
-        {
-            let value = node.args;
-            self.unparse_arguments(*value);
-        }
-        {
-            let value = node.body;
-            self.unparse_expr(*value);
-        }
-    }
-    fn unparse_expr_if_exp(&mut self, node: ExprIfExp<R>) {
-        {
-            let value = node.test;
-            self.unparse_expr(*value);
-        }
-        {
-            let value = node.body;
-            self.unparse_expr(*value);
-        }
-        {
-            let value = node.orelse;
-            self.unparse_expr(*value);
-        }
-    }
-
-    fn unparse_expr_dict(&mut self, node: ExprDict<R>) {
-        for value in node.keys.into_iter().flatten() {
-            self.unparse_expr(value);
-        }
-        for value in node.values {
-            self.unparse_expr(value);
-        }
-    }
-
-    fn unparse_expr_set(&mut self, node: ExprSet<R>) {
-        for value in node.elts {
-            self.unparse_expr(value);
-        }
-    }
-
-    fn unparse_expr_list_comp(&mut self, node: ExprListComp<R>) {
-        {
-            let value = node.elt;
-            self.unparse_expr(*value);
-        }
-        for value in node.generators {
-            self.unparse_comprehension(value);
-        }
-    }
-
-    fn unparse_expr_set_comp(&mut self, node: ExprSetComp<R>) {
-        {
-            let value = node.elt;
-            self.unparse_expr(*value);
-        }
-        for value in node.generators {
-            self.unparse_comprehension(value);
-        }
-    }
-
-    fn unparse_expr_dict_comp(&mut self, node: ExprDictComp<R>) {
-        {
-            let value = node.key;
-            self.unparse_expr(*value);
-        }
-        {
-            let value = node.value;
-            self.unparse_expr(*value);
-        }
-        for value in node.generators {
-            self.unparse_comprehension(value);
-        }
-    }
-
-    fn unparse_expr_generator_exp(&mut self, node: ExprGeneratorExp<R>) {
-        {
-            let value = node.elt;
-            self.unparse_expr(*value);
-        }
-        for value in node.generators {
-            self.unparse_comprehension(value);
-        }
-    }
-
-    fn unparse_expr_await(&mut self, node: ExprAwait<R>) {
-        {
-            let value = node.value;
-            self.unparse_expr(*value);
-        }
-    }
-
-    fn unparse_expr_yield(&mut self, node: ExprYield<R>) {
-        if let Some(value) = node.value {
-            self.unparse_expr(*value);
-        }
-    }
-
-    fn unparse_expr_yield_from(&mut self, node: ExprYieldFrom<R>) {
-        {
-            let value = node.value;
-            self.unparse_expr(*value);
-        }
-    }
-
-    fn unparse_expr_compare(&mut self, node: ExprCompare<R>) {
-        {
-            let value = node.left;
-            self.unparse_expr(*value);
-        }
-        for value in node.comparators {
-            self.unparse_expr(value);
-        }
-    }
-
-    fn unparse_expr_call(&mut self, node: ExprCall<R>) {
-        {
-            let value = node.func;
-            self.unparse_expr(*value);
-        }
-        for value in node.args {
-            self.unparse_expr(value);
-        }
-        for value in node.keywords {
-            self.unparse_keyword(value);
-        }
-    }
-
-    fn unparse_expr_formatted_value(&mut self, node: ExprFormattedValue<R>) {
-        {
-            let value = node.value;
-            self.unparse_expr(*value);
-        }
-        if let Some(value) = node.format_spec {
-            self.unparse_expr(*value);
-        }
-    }
-
-    fn unparse_expr_joined_str(&mut self, node: ExprJoinedStr<R>) {
-        for value in node.values {
-            self.unparse_expr(value);
-        }
-    }
-    fn unparse_expr_constant(&mut self, node: ExprConstant<R>) {}
-
-    fn unparse_expr_attribute(&mut self, node: ExprAttribute<R>) {
-        {
-            let value = node.value;
-            self.unparse_expr(*value);
-        }
-    }
-    fn unparse_expr_subscript(&mut self, node: ExprSubscript<R>) {
+    fn unparse_expr_subscript(&mut self, node: &ExprSubscript<TextRange>) {
         {
             let value = node.value;
             self.unparse_expr(*value);
@@ -550,27 +919,27 @@ pub trait Unparser<'a, W = fmt::Formatter<'a>, R = TextRange> {
             self.unparse_expr(*value);
         }
     }
-    fn unparse_expr_starred(&mut self, node: ExprStarred<R>) {
+    fn unparse_expr_starred(&mut self, node: &ExprStarred<TextRange>) {
         {
             let value = node.value;
             self.unparse_expr(*value);
         }
     }
 
-    fn unparse_expr_name(&mut self, node: ExprName<R>) {}
-    fn unparse_expr_list(&mut self, node: ExprList<R>) {
+    fn unparse_expr_name(&mut self, node: &ExprName<TextRange>) {}
+    fn unparse_expr_list(&mut self, node: &ExprList<TextRange>) {
         for value in node.elts {
             self.unparse_expr(value);
         }
     }
 
-    fn unparse_expr_tuple(&mut self, node: ExprTuple<R>) {
+    fn unparse_expr_tuple(&mut self, node: &ExprTuple<TextRange>) {
         for value in node.elts {
             self.unparse_expr(value);
         }
     }
 
-    fn unparse_expr_slice(&mut self, node: ExprSlice<R>) {
+    fn unparse_expr_slice(&mut self, node: &ExprSlice<TextRange>) {
         if let Some(value) = node.lower {
             self.unparse_expr(*value);
         }
@@ -581,21 +950,24 @@ pub trait Unparser<'a, W = fmt::Formatter<'a>, R = TextRange> {
             self.unparse_expr(*value);
         }
     }
-    fn unparse_expr_context(&mut self, node: ExprContext) {}
+    fn unparse_expr_context(&mut self, node: &ExprContext) {}
 
-    fn unparse_boolop(&mut self, node: BoolOp) {}
-    fn unparse_operator(&mut self, node: Operator) {}
-    fn unparse_unaryop(&mut self, node: UnaryOp) {}
-    fn unparse_cmpop(&mut self, node: CmpOp) {}
-    fn unparse_comprehension(&mut self, node: Comprehension<R>) {}
+    fn unparse_boolop(&mut self, node: &BoolOp) {}
+    fn unparse_operator(&mut self, node: &Operator) {}
+    fn unparse_unaryop(&mut self, node: &UnaryOp) {}
+    fn unparse_cmpop(&mut self, node: &CmpOp) {}
+    fn unparse_comprehension(&mut self, node: &Comprehension<TextRange>) {}
 
-    fn unparse_excepthandler(&mut self, node: ExceptHandler<R>) {
+    fn unparse_excepthandler(&mut self, node: &ExceptHandler<TextRange>) {
         match node {
             ExceptHandler::ExceptHandler(data) => self.unparse_excepthandler_except_handler(data),
         }
     }
 
-    fn unparse_excepthandler_except_handler(&mut self, node: ExceptHandlerExceptHandler<R>) {
+    fn unparse_excepthandler_except_handler(
+        &mut self,
+        node: &ExceptHandlerExceptHandler<TextRange>,
+    ) {
         if let Some(value) = node.type_ {
             self.unparse_expr(*value);
         }
@@ -604,19 +976,24 @@ pub trait Unparser<'a, W = fmt::Formatter<'a>, R = TextRange> {
         }
     }
 
-    fn unparse_arguments(&mut self, node: Arguments<R>) {}
+    fn unparse_arguments(&mut self, node: &Arguments<TextRange>) {}
 
-    fn unparse_arg(&mut self, node: Arg<R>) {}
+    fn unparse_arg(&mut self, node: &Arg<TextRange>) {}
 
-    fn unparse_keyword(&mut self, node: Keyword<R>) {}
+    fn unparse_keyword(&mut self, node: &Keyword<TextRange>) {}
 
-    fn unparse_alias(&mut self, node: Alias<R>) {}
+    fn unparse_alias(&mut self, node: &Alias<TextRange>) {
+        self.write_str(node.name.as_str());
+        if node.asname.is_some() {
+            self.write_str(&format!(" as {}", node.asname.as_ref().unwrap()));
+        }
+    }
 
-    fn unparse_withitem(&mut self, node: WithItem<R>) {}
+    fn unparse_withitem(&mut self, node: &WithItem<TextRange>) {}
 
-    fn unparse_match_case(&mut self, node: MatchCase<R>) {}
+    fn unparse_match_case(&mut self, node: &MatchCase<TextRange>) {}
 
-    fn unparse_pattern(&mut self, node: Pattern<R>) {
+    fn unparse_pattern(&mut self, node: &Pattern<TextRange>) {
         match node {
             Pattern::MatchValue(data) => self.unparse_pattern_match_value(data),
             Pattern::MatchSingleton(data) => self.unparse_pattern_match_singleton(data),
@@ -629,22 +1006,22 @@ pub trait Unparser<'a, W = fmt::Formatter<'a>, R = TextRange> {
         }
     }
 
-    fn unparse_pattern_match_value(&mut self, node: PatternMatchValue<R>) {
+    fn unparse_pattern_match_value(&mut self, node: &PatternMatchValue<TextRange>) {
         {
             let value = node.value;
             self.unparse_expr(*value);
         }
     }
 
-    fn unparse_pattern_match_singleton(&mut self, node: PatternMatchSingleton<R>) {}
+    fn unparse_pattern_match_singleton(&mut self, node: &PatternMatchSingleton<TextRange>) {}
 
-    fn unparse_pattern_match_sequence(&mut self, node: PatternMatchSequence<R>) {
+    fn unparse_pattern_match_sequence(&mut self, node: &PatternMatchSequence<TextRange>) {
         for value in node.patterns {
             self.unparse_pattern(value);
         }
     }
 
-    fn unparse_pattern_match_mapping(&mut self, node: PatternMatchMapping<R>) {
+    fn unparse_pattern_match_mapping(&mut self, node: &PatternMatchMapping<TextRange>) {
         for value in node.keys {
             self.unparse_expr(value);
         }
@@ -653,7 +1030,7 @@ pub trait Unparser<'a, W = fmt::Formatter<'a>, R = TextRange> {
         }
     }
 
-    fn unparse_pattern_match_class(&mut self, node: PatternMatchClass<R>) {
+    fn unparse_pattern_match_class(&mut self, node: &PatternMatchClass<TextRange>) {
         {
             let value = node.cls;
             self.unparse_expr(*value);
@@ -666,21 +1043,21 @@ pub trait Unparser<'a, W = fmt::Formatter<'a>, R = TextRange> {
         }
     }
 
-    fn unparse_pattern_match_star(&mut self, node: PatternMatchStar<R>) {}
+    fn unparse_pattern_match_star(&mut self, node: &PatternMatchStar<TextRange>) {}
 
-    fn unparse_pattern_match_as(&mut self, node: PatternMatchAs<R>) {
+    fn unparse_pattern_match_as(&mut self, node: &PatternMatchAs<TextRange>) {
         if let Some(value) = node.pattern {
             self.unparse_pattern(*value);
         }
     }
 
-    fn unparse_pattern_match_or(&mut self, node: PatternMatchOr<R>) {
+    fn unparse_pattern_match_or(&mut self, node: &PatternMatchOr<TextRange>) {
         for value in node.patterns {
             self.unparse_pattern(value);
         }
     }
 
-    fn unparse_type_param(&mut self, node: TypeParam<R>) {
+    fn unparse_type_param(&mut self, node: &TypeParam<TextRange>) {
         match node {
             TypeParam::TypeVar(data) => self.unparse_type_param_type_var(data),
             TypeParam::ParamSpec(data) => self.unparse_type_param_param_spec(data),
@@ -688,13 +1065,13 @@ pub trait Unparser<'a, W = fmt::Formatter<'a>, R = TextRange> {
         }
     }
 
-    fn unparse_type_param_type_var(&mut self, node: TypeParamTypeVar<R>) {
+    fn unparse_type_param_type_var(&mut self, node: &TypeParamTypeVar<TextRange>) {
         if let Some(value) = node.bound {
             self.unparse_expr(*value);
         }
     }
 
-    fn unparse_type_param_param_spec(&mut self, node: TypeParamParamSpec<R>) {}
+    fn unparse_type_param_param_spec(&mut self, node: &TypeParamParamSpec<TextRange>) {}
 
-    fn unparse_type_param_type_var_tuple(&mut self, node: TypeParamTypeVarTuple<R>) {}
+    fn unparse_type_param_type_var_tuple(&mut self, node: &TypeParamTypeVarTuple<TextRange>) {}
 }

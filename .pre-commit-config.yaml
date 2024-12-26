@@ -1,0 +1,6 @@
+repos:
+  - repo: https://github.com/jvllmr/pre-commit-cargo
+    rev: c8489dd
+    hooks:
+      - id: cargo-fmt
+      - id: cargo-fix
