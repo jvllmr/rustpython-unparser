@@ -1,12 +1,12 @@
 pub mod unparser;
 
+pub use crate::unparser::Unparser;
+
 #[cfg(test)]
 mod tests {
-
+    use super::*;
     use rustpython_parser::ast::Suite;
     use rustpython_parser::Parse;
-
-    use crate::unparser::Unparser;
 
     use std::fs;
     use std::io;
