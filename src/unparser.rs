@@ -14,8 +14,6 @@ use rustpython_ast::{
     UnaryOp, WithItem,
 };
 use rustpython_ast::{Constant, Int};
-use std::fmt;
-use std::fmt::Formatter;
 
 fn get_precedence(node: &Expr<TextRange>) -> usize {
     match node {
@@ -56,58 +54,60 @@ fn get_precedence(node: &Expr<TextRange>) -> usize {
     }
 }
 
-pub struct Unparser<'a> {
-    fmt: Formatter<'a>,
+pub struct Unparser {
+    pub source: String,
     _indent: usize,
     _in_try_star: bool,
     _precedence_level: usize,
 }
 
-impl<'a> Unparser<'a> {
-    pub fn new(fmt: Formatter<'a>) -> Self {
+impl Unparser {
+    pub fn new() -> Self {
         Unparser {
             _in_try_star: false,
             _indent: 0,
             _precedence_level: 0,
-            fmt,
+            source: String::new(),
         }
     }
 
-    fn fill(&mut self, str_: &str) -> fmt::Result {
-        self.write_str(&("\n".to_owned() + &" ".repeat(self._indent * 4) + str_))
+    fn fill(&mut self, str_: &str) {
+        if self.source.len() > 0 {
+            self.write_str(&("\n".to_owned() + &" ".repeat(self._indent * 4) + str_))
+        } else {
+            self.write_str(str_);
+        }
     }
 
-    fn write_str(&mut self, str_: &str) -> fmt::Result {
-        self.fmt.write_str(str_)
+    fn write_str(&mut self, str_: &str) {
+        self.source += str_
     }
 
-    fn block<F>(&mut self, f: F) -> fmt::Result
+    fn block<F>(&mut self, f: F)
     where
-        F: FnOnce(&mut Self) -> fmt::Result,
+        F: FnOnce(&mut Self),
     {
         self._indent += 1;
-        f(self)?;
+        f(self);
         self._indent -= 1;
-        Ok(())
     }
 
-    fn delimit_precedence<F>(&mut self, node: &Expr<TextRange>, f: F) -> fmt::Result
+    fn delimit_precedence<F>(&mut self, node: &Expr<TextRange>, f: F)
     where
-        F: FnOnce(&mut Self) -> fmt::Result,
+        F: FnOnce(&mut Self),
     {
         self._precedence_level = get_precedence(node);
         let should_delimit = get_precedence(node) > self._precedence_level;
         if should_delimit {
-            self.write_str("(")?;
+            self.write_str("(");
         }
-        f(self)?;
+        f(self);
         if should_delimit {
-            self.write_str(")")?;
+            self.write_str(")");
         }
-        Ok(())
     }
 
-    pub fn unparse_stmt(&mut self, node: &Stmt<TextRange>) -> fmt::Result {
+    pub fn unparse_stmt(&mut self, node: &Stmt<TextRange>) {
         match node {
             Stmt::FunctionDef(data) => self.unparse_stmt_function_def(data),
             Stmt::AsyncFunctionDef(data) => self.unparse_stmt_async_function_def(data),
@@ -140,531 +140,482 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    fn unparse_stmt_pass(&mut self, _node: &StmtPass<TextRange>) -> fmt::Result {
+    fn unparse_stmt_pass(&mut self, _node: &StmtPass<TextRange>) {
         self.fill("pass")
     }
 
-    fn unparse_stmt_break(&mut self, _node: &StmtBreak<TextRange>) -> fmt::Result {
+    fn unparse_stmt_break(&mut self, _node: &StmtBreak<TextRange>) {
         self.fill("break")
     }
 
-    fn unparse_stmt_continue(&mut self, _node: &StmtContinue<TextRange>) -> fmt::Result {
+    fn unparse_stmt_continue(&mut self, _node: &StmtContinue<TextRange>) {
         self.fill("continue")
     }
 
-    fn unparse_stmt_function_def(&mut self, node: &StmtFunctionDef<TextRange>) -> fmt::Result {
+    fn unparse_stmt_function_def(&mut self, node: &StmtFunctionDef<TextRange>) {
         for decorator in &node.decorator_list {
-            self.fill("@")?;
-            self.unparse_expr(&decorator)?;
+            self.fill("@");
+            self.unparse_expr(&decorator);
         }
-        self.fill("def ")?;
-        self.write_str(&node.name)?;
+        self.fill("def ");
+        self.write_str(&node.name);
         if node.type_params.len() > 0 {
-            self.write_str("[")?;
+            self.write_str("[");
             let mut type_params_iter = node.type_params.iter().peekable();
             while let Some(type_param) = type_params_iter.next() {
-                self.unparse_type_param(type_param)?;
+                self.unparse_type_param(type_param);
                 if type_params_iter.peek().is_some() {
-                    self.write_str(", ")?;
+                    self.write_str(", ");
                 }
             }
-            self.write_str("]")?;
+            self.write_str("]");
         }
-        self.write_str("(")?;
+        self.write_str("(");
 
-        self.unparse_arguments(&node.args)?;
+        self.unparse_arguments(&node.args);
 
-        self.write_str(")")?;
+        self.write_str(")");
         if let Some(returns) = &node.returns {
-            self.write_str(" -> ")?;
-            self.unparse_expr(&returns)?;
+            self.write_str(" -> ");
+            self.unparse_expr(&returns);
         }
-        self.write_str(":")?;
+        self.write_str(":");
         self.block(|block_self| {
             for value in &node.body {
-                block_self.unparse_stmt(&value)?;
+                block_self.unparse_stmt(&value);
             }
-            Ok(())
-        })?;
-        Ok(())
+        });
     }
 
-    fn unparse_stmt_async_function_def(
-        &mut self,
-        node: &StmtAsyncFunctionDef<TextRange>,
-    ) -> fmt::Result {
+    fn unparse_stmt_async_function_def(&mut self, node: &StmtAsyncFunctionDef<TextRange>) {
         for decorator in &node.decorator_list {
-            self.fill("@")?;
-            self.unparse_expr(&decorator)?;
+            self.fill("@");
+            self.unparse_expr(&decorator);
         }
-        self.fill("async def ")?;
-        self.write_str(&node.name)?;
+        self.fill("async def ");
+        self.write_str(&node.name);
         if node.type_params.len() > 0 {
-            self.write_str("[")?;
+            self.write_str("[");
             let mut type_params_iter = node.type_params.iter().peekable();
             while let Some(type_param) = type_params_iter.next() {
-                self.unparse_type_param(type_param)?;
+                self.unparse_type_param(type_param);
                 if type_params_iter.peek().is_some() {
-                    self.write_str(", ")?;
+                    self.write_str(", ");
                 }
             }
-            self.write_str("]")?;
+            self.write_str("]");
         }
-        self.write_str("(")?;
+        self.write_str("(");
 
-        self.unparse_arguments(&node.args)?;
+        self.unparse_arguments(&node.args);
 
-        self.write_str(")")?;
+        self.write_str(")");
         if let Some(returns) = &node.returns {
-            self.write_str(" -> ")?;
-            self.unparse_expr(&returns)?;
+            self.write_str(" -> ");
+            self.unparse_expr(&returns);
         }
-        self.write_str(":")?;
+        self.write_str(":");
         self.block(|block_self| {
             for value in &node.body {
-                block_self.unparse_stmt(&value)?;
+                block_self.unparse_stmt(&value);
             }
-            Ok(())
-        })?;
-        Ok(())
+        });
     }
 
-    fn unparse_stmt_class_def(&mut self, node: &StmtClassDef<TextRange>) -> fmt::Result {
+    fn unparse_stmt_class_def(&mut self, node: &StmtClassDef<TextRange>) {
         for decorator in &node.decorator_list {
-            self.fill("@")?;
-            self.unparse_expr(decorator)?;
+            self.fill("@");
+            self.unparse_expr(decorator);
         }
 
-        self.fill("class")?;
-        self.write_str(&node.name)?;
+        self.fill("class");
+        self.write_str(&node.name);
 
         if node.type_params.len() > 0 {
-            self.write_str("[")?;
+            self.write_str("[");
             let mut type_params_iter = node.type_params.iter().peekable();
             while let Some(type_param) = type_params_iter.next() {
-                self.unparse_type_param(type_param)?;
+                self.unparse_type_param(type_param);
                 if type_params_iter.peek().is_some() {
-                    self.write_str(", ")?;
+                    self.write_str(", ");
                 }
             }
-            self.write_str("]")?;
+            self.write_str("]");
         }
 
-        self.write_str("(")?;
+        self.write_str("(");
 
         let mut bases_iter = node.bases.iter().peekable();
         let mut keywords_iter = node.keywords.iter().peekable();
 
         while let Some(base) = bases_iter.next() {
-            self.unparse_expr(base)?;
+            self.unparse_expr(base);
             if bases_iter.peek().is_some() || keywords_iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
         while let Some(keyword) = keywords_iter.next() {
-            self.unparse_keyword(keyword)?;
+            self.unparse_keyword(keyword);
             if keywords_iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
-        self.write_str("):")?;
+        self.write_str("):");
 
         self.block(|block_self| {
             for value in &node.body {
-                block_self.unparse_stmt(&value)?;
+                block_self.unparse_stmt(&value);
             }
-            Ok(())
-        })?;
-        Ok(())
+        });
     }
 
-    fn unparse_stmt_return(&mut self, node: &StmtReturn<TextRange>) -> fmt::Result {
-        self.fill("return ")?;
+    fn unparse_stmt_return(&mut self, node: &StmtReturn<TextRange>) {
+        self.fill("return ");
         if let Some(value) = &node.value {
-            self.unparse_expr(&value)?;
+            self.unparse_expr(&value);
         }
-        Ok(())
     }
-    fn unparse_stmt_delete(&mut self, node: &StmtDelete<TextRange>) -> fmt::Result {
-        self.fill("del ")?;
+    fn unparse_stmt_delete(&mut self, node: &StmtDelete<TextRange>) {
+        self.fill("del ");
         let mut targets_iter = node.targets.iter().peekable();
 
         while let Some(target) = targets_iter.next() {
-            self.unparse_expr(target)?;
+            self.unparse_expr(target);
             if targets_iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
-        Ok(())
     }
 
-    fn unparse_stmt_assign(&mut self, node: &StmtAssign<TextRange>) -> fmt::Result {
+    fn unparse_stmt_assign(&mut self, node: &StmtAssign<TextRange>) {
         let mut targets_iter = node.targets.iter().peekable();
-        self.fill("")?;
+        self.fill("");
         while let Some(target) = targets_iter.next() {
-            self.unparse_expr(target)?;
+            self.unparse_expr(target);
             if targets_iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
-        self.write_str(" = ")?;
-        self.unparse_expr(&node.value)?;
+        self.write_str(" = ");
+        self.unparse_expr(&node.value);
         if node.type_comment.is_some() {
-            self.write_str(&node.type_comment.as_ref().unwrap())?;
+            self.write_str(&node.type_comment.as_ref().unwrap());
         }
-        Ok(())
     }
 
-    fn unparse_stmt_type_alias(&mut self, node: &StmtTypeAlias<TextRange>) -> fmt::Result {
-        self.fill("")?;
-        self.unparse_expr(&node.name)?;
+    fn unparse_stmt_type_alias(&mut self, node: &StmtTypeAlias<TextRange>) {
+        self.fill("");
+        self.unparse_expr(&node.name);
         if node.type_params.len() > 0 {
-            self.write_str("[")?;
+            self.write_str("[");
             let mut type_params_iter = node.type_params.iter().peekable();
             while let Some(type_param) = type_params_iter.next() {
-                self.unparse_type_param(type_param)?;
+                self.unparse_type_param(type_param);
                 if type_params_iter.peek().is_some() {
-                    self.write_str(", ")?;
+                    self.write_str(", ");
                 }
             }
-            self.write_str("]")?;
+            self.write_str("]");
         }
-        self.write_str(": ")?;
-        self.unparse_expr(&node.value)?;
-        Ok(())
+        self.write_str(": ");
+        self.unparse_expr(&node.value);
     }
 
-    fn unparse_stmt_aug_assign(&mut self, node: &StmtAugAssign<TextRange>) -> fmt::Result {
-        self.fill("")?;
-        self.unparse_expr(&node.target)?;
-        self.write_str(" ")?;
-        self.unparse_operator(&node.op)?;
-        self.write_str("= ")?;
-        self.unparse_expr(&node.value)?;
-        Ok(())
+    fn unparse_stmt_aug_assign(&mut self, node: &StmtAugAssign<TextRange>) {
+        self.fill("");
+        self.unparse_expr(&node.target);
+        self.write_str(" ");
+        self.unparse_operator(&node.op);
+        self.write_str("= ");
+        self.unparse_expr(&node.value);
     }
 
-    fn unparse_stmt_ann_assign(&mut self, node: &StmtAnnAssign<TextRange>) -> fmt::Result {
-        self.fill("")?;
-        self.unparse_expr(&node.target)?;
-        self.write_str(": ")?;
-        self.unparse_expr(&node.annotation)?;
-        self.write_str(" = ")?;
+    fn unparse_stmt_ann_assign(&mut self, node: &StmtAnnAssign<TextRange>) {
+        self.fill("");
+        self.unparse_expr(&node.target);
+        self.write_str(": ");
+        self.unparse_expr(&node.annotation);
+        self.write_str(" = ");
         if let Some(value) = &node.value {
-            self.unparse_expr(value)?;
+            self.unparse_expr(value);
         }
-        Ok(())
     }
 
-    fn unparse_stmt_for(&mut self, node: &StmtFor<TextRange>) -> fmt::Result {
-        self.fill("for ")?;
-        self.unparse_expr(&node.target)?;
-        self.write_str(" in ")?;
-        self.unparse_expr(&node.iter)?;
-        self.write_str(":")?;
+    fn unparse_stmt_for(&mut self, node: &StmtFor<TextRange>) {
+        self.fill("for ");
+        self.unparse_expr(&node.target);
+        self.write_str(" in ");
+        self.unparse_expr(&node.iter);
+        self.write_str(":");
         self.block(|block_self| {
             for value in &node.body {
-                block_self.unparse_stmt(value)?;
+                block_self.unparse_stmt(value);
             }
-            Ok(())
-        })?;
+        });
         if node.orelse.len() > 0 {
-            self.fill("else:")?;
+            self.fill("else:");
             self.block(|block_self| {
                 for stmt in &node.orelse {
-                    block_self.unparse_stmt(stmt)?;
+                    block_self.unparse_stmt(stmt);
                 }
-                Ok(())
-            })?;
+            });
         }
-        Ok(())
     }
-    fn unparse_stmt_async_for(&mut self, node: &StmtAsyncFor<TextRange>) -> fmt::Result {
-        self.fill("async for ")?;
-        self.unparse_expr(&node.target)?;
-        self.write_str(" in ")?;
-        self.unparse_expr(&node.iter)?;
-        self.write_str(":")?;
+    fn unparse_stmt_async_for(&mut self, node: &StmtAsyncFor<TextRange>) {
+        self.fill("async for ");
+        self.unparse_expr(&node.target);
+        self.write_str(" in ");
+        self.unparse_expr(&node.iter);
+        self.write_str(":");
         self.block(|block_self| {
             for value in &node.body {
-                block_self.unparse_stmt(value)?;
+                block_self.unparse_stmt(value);
             }
-            Ok(())
-        })?;
+        });
         if node.orelse.len() > 0 {
-            self.fill("else:")?;
+            self.fill("else:");
             self.block(|block_self| {
                 for stmt in &node.orelse {
-                    block_self.unparse_stmt(stmt)?;
+                    block_self.unparse_stmt(stmt);
                 }
-                Ok(())
-            })?;
+            });
         }
-        Ok(())
     }
-    fn unparse_stmt_while(&mut self, node: &StmtWhile<TextRange>) -> fmt::Result {
-        self.fill("while ")?;
-        self.unparse_expr(&node.test)?;
-        self.write_str(":")?;
+    fn unparse_stmt_while(&mut self, node: &StmtWhile<TextRange>) {
+        self.fill("while ");
+        self.unparse_expr(&node.test);
+        self.write_str(":");
         self.block(|block_self| {
             for stmt in &node.body {
-                block_self.unparse_stmt(stmt)?;
+                block_self.unparse_stmt(stmt);
             }
-            Ok(())
-        })?;
+        });
 
         if node.orelse.len() > 0 {
-            self.fill("else:")?;
+            self.fill("else:");
             self.block(|block_self| {
                 for stmt in &node.orelse {
-                    block_self.unparse_stmt(stmt)?;
+                    block_self.unparse_stmt(stmt);
                 }
-                Ok(())
-            })?;
+            });
         }
-        Ok(())
     }
 
-    fn unparse_stmt_if(&mut self, node: &StmtIf<TextRange>) -> fmt::Result {
-        self.fill("if ")?;
-        self.unparse_expr(&node.test)?;
-        self.write_str(":")?;
+    fn unparse_stmt_if(&mut self, node: &StmtIf<TextRange>) {
+        self.fill("if ");
+        self.unparse_expr(&node.test);
+        self.write_str(":");
         self.block(|block_self| {
             for stmt in &node.body {
-                block_self.unparse_stmt(stmt)?;
+                block_self.unparse_stmt(stmt);
             }
-            Ok(())
-        })?;
+        });
         match node.orelse.as_slice() {
             [Stmt::If(inner_if)] => {
-                self.fill("elif ")?;
-                self.unparse_expr(&inner_if.test)?;
-                self.write_str(":")?;
+                self.fill("elif ");
+                self.unparse_expr(&inner_if.test);
+                self.write_str(":");
                 self.block(|block_self| {
                     for stmt in &inner_if.body {
-                        block_self.unparse_stmt(stmt)?;
+                        block_self.unparse_stmt(stmt);
                     }
-                    Ok(())
-                })?;
+                });
             }
             [] => {}
             _ => {
-                self.fill("else:")?;
+                self.fill("else:");
                 self.block(|block_self| {
                     for stmt in &node.orelse {
-                        block_self.unparse_stmt(stmt)?;
+                        block_self.unparse_stmt(stmt);
                     }
-                    Ok(())
-                })?;
+                });
             }
         }
-        Ok(())
     }
 
-    fn unparse_stmt_with(&mut self, node: &StmtWith<TextRange>) -> fmt::Result {
-        self.fill("with ")?;
+    fn unparse_stmt_with(&mut self, node: &StmtWith<TextRange>) {
+        self.fill("with ");
         let mut items_iter = node.items.iter().peekable();
         while let Some(item) = items_iter.next() {
-            self.unparse_withitem(item)?;
+            self.unparse_withitem(item);
             if items_iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
-        self.write_str(":")?;
+        self.write_str(":");
         self.block(|block_self| {
             for stmt in &node.body {
-                block_self.unparse_stmt(stmt)?;
+                block_self.unparse_stmt(stmt);
             }
-            Ok(())
-        })?;
-        Ok(())
+        });
     }
-    fn unparse_stmt_async_with(&mut self, node: &StmtAsyncWith<TextRange>) -> fmt::Result {
-        self.fill("async with ")?;
+    fn unparse_stmt_async_with(&mut self, node: &StmtAsyncWith<TextRange>) {
+        self.fill("async with ");
         let mut items_iter = node.items.iter().peekable();
         while let Some(item) = items_iter.next() {
-            self.unparse_withitem(item)?;
+            self.unparse_withitem(item);
             if items_iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
-        self.write_str(":")?;
+        self.write_str(":");
         self.block(|block_self| {
             for stmt in &node.body {
-                block_self.unparse_stmt(stmt)?;
+                block_self.unparse_stmt(stmt);
             }
-            Ok(())
-        })?;
-        Ok(())
+        });
     }
 
-    fn unparse_stmt_match(&mut self, node: &StmtMatch<TextRange>) -> fmt::Result {
-        self.fill("match ")?;
-        self.unparse_expr(&node.subject)?;
-        self.write_str(":")?;
+    fn unparse_stmt_match(&mut self, node: &StmtMatch<TextRange>) {
+        self.fill("match ");
+        self.unparse_expr(&node.subject);
+        self.write_str(":");
         self.block(|block_self| {
             for case in &node.cases {
-                block_self.unparse_match_case(case)?;
+                block_self.unparse_match_case(case);
             }
-            Ok(())
-        })?;
-        Ok(())
+        });
     }
 
-    fn unparse_stmt_raise(&mut self, node: &StmtRaise<TextRange>) -> fmt::Result {
-        self.fill("raise ")?;
+    fn unparse_stmt_raise(&mut self, node: &StmtRaise<TextRange>) {
+        self.fill("raise ");
         if let Some(exc) = &node.exc {
-            self.unparse_expr(exc)?;
+            self.unparse_expr(exc);
         }
         if let Some(cause) = &node.cause {
-            self.write_str(" from ")?;
-            self.unparse_expr(cause)?;
+            self.write_str(" from ");
+            self.unparse_expr(cause);
         }
-        Ok(())
     }
 
-    fn unparse_stmt_try(&mut self, node: &StmtTry<TextRange>) -> fmt::Result {
+    fn unparse_stmt_try(&mut self, node: &StmtTry<TextRange>) {
         let prev_try_star = self._in_try_star;
         self._in_try_star = false;
-        self.fill("try:")?;
+        self.fill("try:");
         self.block(|block_self| {
             for stmt in &node.body {
-                block_self.unparse_stmt(stmt)?;
+                block_self.unparse_stmt(stmt);
             }
-            Ok(())
-        })?;
+        });
 
         for handler in &node.handlers {
-            self.unparse_excepthandler(handler)?;
+            self.unparse_excepthandler(handler);
         }
 
         if node.orelse.len() > 0 {
-            self.fill("else:")?;
+            self.fill("else:");
             self.block(|block_self| {
                 for stmt in &node.orelse {
-                    block_self.unparse_stmt(stmt)?;
+                    block_self.unparse_stmt(stmt);
                 }
-                Ok(())
-            })?;
+            });
         }
 
         if node.finalbody.len() > 0 {
-            self.fill("finally:")?;
+            self.fill("finally:");
             self.block(|block_self| {
                 for stmt in &node.finalbody {
-                    block_self.unparse_stmt(stmt)?;
+                    block_self.unparse_stmt(stmt);
                 }
-                Ok(())
-            })?;
+            });
         }
         self._in_try_star = prev_try_star;
-        Ok(())
     }
-    fn unparse_stmt_try_star(&mut self, node: &StmtTryStar<TextRange>) -> fmt::Result {
+    fn unparse_stmt_try_star(&mut self, node: &StmtTryStar<TextRange>) {
         let prev_try_star = self._in_try_star;
         self._in_try_star = true;
-        self.fill("try:")?;
+        self.fill("try:");
         self.block(|block_self| {
             for stmt in &node.body {
-                block_self.unparse_stmt(stmt)?;
+                block_self.unparse_stmt(stmt);
             }
-            Ok(())
-        })?;
+        });
 
         for handler in &node.handlers {
-            self.unparse_excepthandler(handler)?;
+            self.unparse_excepthandler(handler);
         }
 
         if node.orelse.len() > 0 {
-            self.fill("else:")?;
+            self.fill("else:");
             self.block(|block_self| {
                 for stmt in &node.orelse {
-                    block_self.unparse_stmt(stmt)?;
+                    block_self.unparse_stmt(stmt);
                 }
-                Ok(())
-            })?;
+            });
         }
 
         if node.finalbody.len() > 0 {
-            self.fill("finally:")?;
+            self.fill("finally:");
             self.block(|block_self| {
                 for stmt in &node.finalbody {
-                    block_self.unparse_stmt(stmt)?;
+                    block_self.unparse_stmt(stmt);
                 }
-                Ok(())
-            })?;
+            });
         }
         self._in_try_star = prev_try_star;
-        Ok(())
     }
-    fn unparse_stmt_assert(&mut self, node: &StmtAssert<TextRange>) -> fmt::Result {
-        self.fill("assert ")?;
-        self.unparse_expr(&node.test)?;
+    fn unparse_stmt_assert(&mut self, node: &StmtAssert<TextRange>) {
+        self.fill("assert ");
+        self.unparse_expr(&node.test);
         if let Some(msg) = &node.msg {
-            self.write_str(", ")?;
-            self.unparse_expr(msg)?;
+            self.write_str(", ");
+            self.unparse_expr(msg);
         }
-        Ok(())
     }
 
-    fn unparse_stmt_import(&mut self, node: &StmtImport<TextRange>) -> fmt::Result {
-        self.fill("import ")?;
+    fn unparse_stmt_import(&mut self, node: &StmtImport<TextRange>) {
+        self.fill("import ");
         let mut iter = node.names.iter().peekable();
         while let Some(name) = iter.next() {
-            self.unparse_alias(name)?;
+            self.unparse_alias(name);
             if iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
-        Ok(())
     }
-    fn unparse_stmt_import_from(&mut self, node: &StmtImportFrom<TextRange>) -> fmt::Result {
-        self.fill("from ")?;
+    fn unparse_stmt_import_from(&mut self, node: &StmtImportFrom<TextRange>) {
+        self.fill("from ");
         let level = node.level.unwrap_or(Int::new(0));
-        self.write_str(&".".repeat(level.to_usize()))?;
+        self.write_str(&".".repeat(level.to_usize()));
         let module = match &node.module {
             Some(name) => name.to_string(),
             None => "".to_string(),
         };
-        self.write_str(&(module + " import "))?;
+        self.write_str(&(module + " import "));
         let mut iter = node.names.iter().peekable();
         while let Some(name) = iter.next() {
-            self.unparse_alias(name)?;
+            self.unparse_alias(name);
             if iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
-        Ok(())
     }
-    fn unparse_stmt_global(&mut self, node: &StmtGlobal<TextRange>) -> fmt::Result {
-        self.fill("global ")?;
+    fn unparse_stmt_global(&mut self, node: &StmtGlobal<TextRange>) {
+        self.fill("global ");
         let mut iter = node.names.iter().peekable();
         while let Some(name) = iter.next() {
-            self.write_str(name)?;
+            self.write_str(name);
             if iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
-        Ok(())
     }
-    fn unparse_stmt_nonlocal(&mut self, node: &StmtNonlocal<TextRange>) -> fmt::Result {
-        self.fill("nonlocal ")?;
+    fn unparse_stmt_nonlocal(&mut self, node: &StmtNonlocal<TextRange>) {
+        self.fill("nonlocal ");
         let mut iter = node.names.iter().peekable();
         while let Some(name) = iter.next() {
-            self.write_str(name)?;
+            self.write_str(name);
             if iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
-        Ok(())
     }
-    fn unparse_stmt_expr(&mut self, node: &StmtExpr<TextRange>) -> fmt::Result {
-        self.fill("")?;
-        self.unparse_expr(&node.value)?;
-        Ok(())
+    fn unparse_stmt_expr(&mut self, node: &StmtExpr<TextRange>) {
+        self.fill("");
+        self.unparse_expr(&node.value);
     }
 
-    fn unparse_expr(&mut self, node: &Expr<TextRange>) -> fmt::Result {
+    pub fn unparse_expr(&mut self, node: &Expr<TextRange>) {
         match node {
             Expr::BoolOp(data) => self.unparse_expr_bool_op(data),
             Expr::NamedExpr(data) => self.unparse_expr_named_expr(data),
@@ -696,7 +647,7 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    fn unparse_expr_bool_op(&mut self, node: &ExprBoolOp<TextRange>) -> fmt::Result {
+    fn unparse_expr_bool_op(&mut self, node: &ExprBoolOp<TextRange>) {
         let prev_precedence_level = self._precedence_level;
         let operator = match node.op {
             BoolOp::And => " and ",
@@ -709,42 +660,38 @@ impl<'a> Unparser<'a> {
         self.delimit_precedence(&enum_member, |block_self| {
             while let Some(expr) = values_iter.next() {
                 block_self._precedence_level += 1;
-                block_self.unparse_expr(expr)?;
+                block_self.unparse_expr(expr);
                 if values_iter.peek().is_some() {
-                    block_self.write_str(&operator)?;
+                    block_self.write_str(&operator);
                 }
             }
-            Ok(())
-        })?;
+        });
 
         self._precedence_level = prev_precedence_level;
-        Ok(())
     }
 
-    fn unparse_expr_named_expr(&mut self, node: &ExprNamedExpr<TextRange>) -> fmt::Result {
+    fn unparse_expr_named_expr(&mut self, node: &ExprNamedExpr<TextRange>) {
         let enum_member = Expr::NamedExpr(node.to_owned());
         self.delimit_precedence(&enum_member, |block_self| {
-            block_self.unparse_expr(&node.target)?;
-            block_self.write_str(" := ")?;
-            block_self.unparse_expr(&node.value)?;
-            Ok(())
+            block_self.unparse_expr(&node.target);
+            block_self.write_str(" := ");
+            block_self.unparse_expr(&node.value);
         })
     }
 
-    fn unparse_expr_bin_op(&mut self, node: &ExprBinOp<TextRange>) -> fmt::Result {
+    fn unparse_expr_bin_op(&mut self, node: &ExprBinOp<TextRange>) {
         let enum_member = Expr::BinOp(node.to_owned());
 
         self.delimit_precedence(&enum_member, |block_self| {
-            block_self.unparse_expr(&node.left)?;
-            block_self.write_str(" ")?;
-            block_self.unparse_operator(&node.op)?;
-            block_self.write_str(" ")?;
-            block_self.unparse_expr(&node.right)?;
-            Ok(())
+            block_self.unparse_expr(&node.left);
+            block_self.write_str(" ");
+            block_self.unparse_operator(&node.op);
+            block_self.write_str(" ");
+            block_self.unparse_expr(&node.right);
         })
     }
 
-    fn unparse_expr_unary_op(&mut self, node: &ExprUnaryOp<TextRange>) -> fmt::Result {
+    fn unparse_expr_unary_op(&mut self, node: &ExprUnaryOp<TextRange>) {
         let enum_member = Expr::UnaryOp(node.to_owned());
         let operator = match node.op {
             UnaryOp::Invert => "~",
@@ -754,151 +701,140 @@ impl<'a> Unparser<'a> {
         };
 
         self.delimit_precedence(&enum_member, |block_self| {
-            block_self.write_str(&operator)?;
+            block_self.write_str(&operator);
             block_self.unparse_expr(&node.operand)
         })
     }
-    fn unparse_expr_lambda(&mut self, node: &ExprLambda<TextRange>) -> fmt::Result {
+    fn unparse_expr_lambda(&mut self, node: &ExprLambda<TextRange>) {
         let enum_member = Expr::Lambda(node.to_owned());
 
         self.delimit_precedence(&enum_member, |block_self| {
-            block_self.write_str("lambda ")?;
-            block_self.unparse_arguments(&node.args)?;
-            block_self.write_str(": ")?;
-            block_self.unparse_expr(&node.body)?;
-            Ok(())
+            block_self.write_str("lambda ");
+            block_self.unparse_arguments(&node.args);
+            block_self.write_str(": ");
+            block_self.unparse_expr(&node.body);
         })
     }
-    fn unparse_expr_if_exp(&mut self, node: &ExprIfExp<TextRange>) -> fmt::Result {
+    fn unparse_expr_if_exp(&mut self, node: &ExprIfExp<TextRange>) {
         let enum_member = Expr::IfExp(node.to_owned());
         self.delimit_precedence(&enum_member, |block_self| {
-            block_self.unparse_expr(&node.body)?;
-            block_self.write_str(" if ")?;
-            block_self.unparse_expr(&node.test)?;
-            block_self.write_str(" else ")?;
-            block_self.unparse_expr(&node.orelse)?;
-            Ok(())
+            block_self.unparse_expr(&node.body);
+            block_self.write_str(" if ");
+            block_self.unparse_expr(&node.test);
+            block_self.write_str(" else ");
+            block_self.unparse_expr(&node.orelse);
         })
     }
 
-    fn unparse_expr_dict(&mut self, node: &ExprDict<TextRange>) -> fmt::Result {
+    fn unparse_expr_dict(&mut self, node: &ExprDict<TextRange>) {
         let mut zipped = node.keys.iter().zip(node.values.iter()).peekable();
 
-        self.write_str("{")?;
+        self.write_str("{");
         while let Some((key, value)) = zipped.next() {
             match key {
                 Some(key_value) => {
-                    self.unparse_expr(key_value)?;
-                    self.write_str(": ")?;
+                    self.unparse_expr(key_value);
+                    self.write_str(": ");
                 }
                 None => {
-                    self.write_str("**")?;
+                    self.write_str("**");
                 }
             }
-            self.unparse_expr(value)?;
+            self.unparse_expr(value);
             if zipped.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
-        self.write_str("}")?;
-        Ok(())
+        self.write_str("}");
     }
 
-    fn unparse_expr_set(&mut self, node: &ExprSet<TextRange>) -> fmt::Result {
+    fn unparse_expr_set(&mut self, node: &ExprSet<TextRange>) {
         if node.elts.len() > 0 {
-            self.write_str("{")?;
+            self.write_str("{");
             let mut elts_iter = node.elts.iter().peekable();
             while let Some(expr) = elts_iter.next() {
-                self.unparse_expr(expr)?;
+                self.unparse_expr(expr);
                 if elts_iter.peek().is_some() {
-                    self.write_str(", ")?;
+                    self.write_str(", ");
                 }
             }
-            self.write_str("}")?;
+            self.write_str("}");
         } else {
-            self.write_str("{*()}")?;
+            self.write_str("{*()}");
         }
-        Ok(())
     }
 
-    fn unparse_expr_list_comp(&mut self, node: &ExprListComp<TextRange>) -> fmt::Result {
-        self.write_str("[")?;
-        self.unparse_expr(&node.elt)?;
+    fn unparse_expr_list_comp(&mut self, node: &ExprListComp<TextRange>) {
+        self.write_str("[");
+        self.unparse_expr(&node.elt);
         for generator in &node.generators {
-            self.unparse_comprehension(generator)?;
+            self.unparse_comprehension(generator);
         }
-        self.write_str("]")?;
-        Ok(())
+        self.write_str("]");
     }
 
-    fn unparse_expr_set_comp(&mut self, node: &ExprSetComp<TextRange>) -> fmt::Result {
-        self.write_str("{")?;
-        self.unparse_expr(&node.elt)?;
+    fn unparse_expr_set_comp(&mut self, node: &ExprSetComp<TextRange>) {
+        self.write_str("{");
+        self.unparse_expr(&node.elt);
 
         for generator in &node.generators {
-            self.unparse_comprehension(generator)?;
+            self.unparse_comprehension(generator);
         }
-        self.write_str("}")?;
-        Ok(())
+        self.write_str("}");
     }
 
-    fn unparse_expr_dict_comp(&mut self, node: &ExprDictComp<TextRange>) -> fmt::Result {
-        self.write_str("{")?;
-        self.unparse_expr(&node.key)?;
-        self.write_str(": ")?;
-        self.unparse_expr(&node.value)?;
+    fn unparse_expr_dict_comp(&mut self, node: &ExprDictComp<TextRange>) {
+        self.write_str("{");
+        self.unparse_expr(&node.key);
+        self.write_str(": ");
+        self.unparse_expr(&node.value);
 
         for generator in &node.generators {
-            self.unparse_comprehension(generator)?;
+            self.unparse_comprehension(generator);
         }
-        Ok(())
     }
 
-    fn unparse_expr_generator_exp(&mut self, node: &ExprGeneratorExp<TextRange>) -> fmt::Result {
-        self.unparse_expr(&node.elt)?;
+    fn unparse_expr_generator_exp(&mut self, node: &ExprGeneratorExp<TextRange>) {
+        self.unparse_expr(&node.elt);
 
         for generator in &node.generators {
-            self.unparse_comprehension(generator)?;
+            self.unparse_comprehension(generator);
         }
-        Ok(())
     }
 
-    fn unparse_expr_await(&mut self, node: &ExprAwait<TextRange>) -> fmt::Result {
+    fn unparse_expr_await(&mut self, node: &ExprAwait<TextRange>) {
         let enum_member = Expr::Await(node.to_owned());
         self.delimit_precedence(&enum_member, |block_self| {
-            block_self.write_str("await ")?;
-            block_self.unparse_expr(&node.value)?;
-            Ok(())
+            block_self.write_str("await ");
+            block_self.unparse_expr(&node.value);
         })
     }
 
-    fn unparse_expr_yield(&mut self, node: &ExprYield<TextRange>) -> fmt::Result {
+    fn unparse_expr_yield(&mut self, node: &ExprYield<TextRange>) {
         let enum_member = Expr::Yield(node.to_owned());
         self.delimit_precedence(&enum_member, |block_self| {
-            block_self.write_str("yield")?;
+            block_self.write_str("yield");
             if let Some(expr) = &node.value {
-                block_self.write_str(" ")?;
-                block_self.unparse_expr(expr)?;
+                block_self.write_str(" ");
+                block_self.unparse_expr(expr);
             }
-            Ok(())
         })
     }
 
-    fn unparse_expr_yield_from(&mut self, node: &ExprYieldFrom<TextRange>) -> fmt::Result {
+    fn unparse_expr_yield_from(&mut self, node: &ExprYieldFrom<TextRange>) {
         let enum_member = Expr::YieldFrom(node.to_owned());
         self.delimit_precedence(&enum_member, |block_self| {
-            block_self.write_str("yield from ")?;
+            block_self.write_str("yield from ");
 
-            block_self.unparse_expr(&node.value)?;
-            Ok(())
+            block_self.unparse_expr(&node.value);
         })
     }
 
-    fn unparse_expr_compare(&mut self, node: &ExprCompare<TextRange>) -> fmt::Result {
+    fn unparse_expr_compare(&mut self, node: &ExprCompare<TextRange>) {
         let enum_member = Expr::Compare(node.to_owned());
         let zipped = node.ops.iter().zip(node.comparators.iter());
         self.delimit_precedence(&enum_member, |block_self| {
-            block_self.unparse_expr(&node.left)?;
+            block_self.unparse_expr(&node.left);
             for (op, comp) in zipped {
                 let operator = match op {
                     CmpOp::Eq => " == ",
@@ -912,66 +848,58 @@ impl<'a> Unparser<'a> {
                     CmpOp::NotEq => " != ",
                     CmpOp::NotIn => " not in ",
                 };
-                block_self.write_str(&operator)?;
-                block_self.unparse_expr(comp)?;
+                block_self.write_str(&operator);
+                block_self.unparse_expr(comp);
             }
-            Ok(())
         })
     }
 
-    fn unparse_expr_call(&mut self, node: &ExprCall<TextRange>) -> fmt::Result {
-        self.unparse_expr(&node.func)?;
+    fn unparse_expr_call(&mut self, node: &ExprCall<TextRange>) {
+        self.unparse_expr(&node.func);
         let mut args_iter = node.args.iter().peekable();
         let mut keywords_iter = node.keywords.iter().peekable();
         while let Some(arg) = args_iter.next() {
-            self.unparse_expr(arg)?;
+            self.unparse_expr(arg);
             if args_iter.peek().is_some() || keywords_iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
         while let Some(keyword) = keywords_iter.next() {
-            self.unparse_keyword(keyword)?;
+            self.unparse_keyword(keyword);
             if keywords_iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
-        Ok(())
     }
 
-    fn unparse_expr_formatted_value(
-        &mut self,
-        node: &ExprFormattedValue<TextRange>,
-    ) -> fmt::Result {
+    fn unparse_expr_formatted_value(&mut self, node: &ExprFormattedValue<TextRange>) {
         // TODO
-        self.write_str("{ ")?;
-        self.unparse_expr(&node.value)?;
+        self.write_str("{ ");
+        self.unparse_expr(&node.value);
 
         if let Some(format_spec) = &node.format_spec {
-            self.write_str(":")?;
-            self.unparse_expr(format_spec)?;
+            self.write_str(":");
+            self.unparse_expr(format_spec);
         }
-        self.write_str(" }")?;
-        Ok(())
+        self.write_str(" }");
     }
 
-    fn unparse_expr_joined_str(&mut self, _node: &ExprJoinedStr<TextRange>) -> fmt::Result {
+    fn unparse_expr_joined_str(&mut self, _node: &ExprJoinedStr<TextRange>) {
         // TODO
-        Ok(())
     }
 
-    fn _unparse_constant(&mut self, constant: &Constant) -> fmt::Result {
+    fn _unparse_constant(&mut self, constant: &Constant) {
         return match constant {
             Constant::Tuple(values) => {
-                self.write_str("(")?;
+                self.write_str("(");
                 let mut values_iter = values.iter().peekable();
                 while let Some(value) = values_iter.next() {
-                    self._unparse_constant(value)?;
+                    self._unparse_constant(value);
                     if values_iter.peek().is_some() {
-                        self.write_str(", ")?;
+                        self.write_str(", ");
                     }
                 }
-                self.write_str(")")?;
-                Ok(())
+                self.write_str(")");
             }
             Constant::Ellipsis => self.write_str("..."),
             Constant::Bool(value) => {
@@ -984,10 +912,7 @@ impl<'a> Unparser<'a> {
             Constant::Bytes(value) => {
                 let utf8 = String::from_utf8(value.to_owned());
 
-                match utf8 {
-                    Ok(str_) => self.write_str(&str_),
-                    Err(_err) => Err(fmt::Error),
-                }
+                self.write_str(&utf8.unwrap());
             }
             Constant::Int(value) => self.write_str(&value.to_string()),
             Constant::Str(value) => self.write_str(value),
@@ -997,68 +922,64 @@ impl<'a> Unparser<'a> {
         };
     }
 
-    fn unparse_expr_constant(&mut self, node: &ExprConstant<TextRange>) -> fmt::Result {
+    fn unparse_expr_constant(&mut self, node: &ExprConstant<TextRange>) {
         if node.kind.as_deref().is_some_and(|kind| kind == "u") {
-            self.write_str("u")?;
+            self.write_str("u");
         }
         self._unparse_constant(&node.value)
     }
 
-    fn unparse_expr_attribute(&mut self, node: &ExprAttribute<TextRange>) -> fmt::Result {
-        self.write_str(".")?;
+    fn unparse_expr_attribute(&mut self, node: &ExprAttribute<TextRange>) {
+        self.write_str(".");
         self.unparse_expr(&node.value)
     }
-    fn unparse_expr_subscript(&mut self, node: &ExprSubscript<TextRange>) -> fmt::Result {
-        self.unparse_expr(&node.value)?;
-        self.write_str("[")?;
-        self.unparse_expr(&node.slice)?;
-        self.write_str("]")?;
-        Ok(())
+    fn unparse_expr_subscript(&mut self, node: &ExprSubscript<TextRange>) {
+        self.unparse_expr(&node.value);
+        self.write_str("[");
+        self.unparse_expr(&node.slice);
+        self.write_str("]");
     }
-    fn unparse_expr_starred(&mut self, node: &ExprStarred<TextRange>) -> fmt::Result {
-        self.write_str("*")?;
+    fn unparse_expr_starred(&mut self, node: &ExprStarred<TextRange>) {
+        self.write_str("*");
         self.unparse_expr(&node.value)
     }
 
-    fn unparse_expr_name(&mut self, node: &ExprName<TextRange>) -> fmt::Result {
+    fn unparse_expr_name(&mut self, node: &ExprName<TextRange>) {
         self.write_str(&node.id.as_str())
     }
-    fn unparse_expr_list(&mut self, node: &ExprList<TextRange>) -> fmt::Result {
+    fn unparse_expr_list(&mut self, node: &ExprList<TextRange>) {
         let mut elts_iter = node.elts.iter().peekable();
-        self.write_str("[")?;
+        self.write_str("[");
         while let Some(expr) = elts_iter.next() {
-            self.unparse_expr(expr)?;
+            self.unparse_expr(expr);
         }
-        self.write_str("]")?;
-        Ok(())
+        self.write_str("]");
     }
 
-    fn unparse_expr_tuple(&mut self, node: &ExprTuple<TextRange>) -> fmt::Result {
+    fn unparse_expr_tuple(&mut self, node: &ExprTuple<TextRange>) {
         let mut elts_iter = node.elts.iter().peekable();
-        self.write_str("(")?;
+        self.write_str("(");
         while let Some(expr) = elts_iter.next() {
-            self.unparse_expr(expr)?;
+            self.unparse_expr(expr);
         }
-        self.write_str(")")?;
-        Ok(())
+        self.write_str(")");
     }
 
-    fn unparse_expr_slice(&mut self, node: &ExprSlice<TextRange>) -> fmt::Result {
+    fn unparse_expr_slice(&mut self, node: &ExprSlice<TextRange>) {
         if let Some(lower) = &node.lower {
-            self.unparse_expr(lower)?;
+            self.unparse_expr(lower);
         }
-        self.write_str(":")?;
+        self.write_str(":");
         if let Some(upper) = &node.upper {
-            self.unparse_expr(upper)?;
+            self.unparse_expr(upper);
         }
         if let Some(step) = &node.step {
-            self.write_str(":")?;
-            self.unparse_expr(step)?;
+            self.write_str(":");
+            self.unparse_expr(step);
         }
-        Ok(())
     }
 
-    fn unparse_operator(&mut self, node: &Operator) -> fmt::Result {
+    fn unparse_operator(&mut self, node: &Operator) {
         self.write_str(match node {
             Operator::Add => "+",
             Operator::Sub => "-",
@@ -1076,22 +997,21 @@ impl<'a> Unparser<'a> {
         })
     }
 
-    fn unparse_comprehension(&mut self, node: &Comprehension<TextRange>) -> fmt::Result {
+    fn unparse_comprehension(&mut self, node: &Comprehension<TextRange>) {
         if node.is_async {
-            self.write_str("async for")?;
+            self.write_str("async for");
         } else {
-            self.write_str("for")?;
+            self.write_str("for");
         }
-        self.unparse_expr(&node.target)?;
-        self.write_str(" in ")?;
-        self.unparse_expr(&node.iter)?;
+        self.unparse_expr(&node.target);
+        self.write_str(" in ");
+        self.unparse_expr(&node.iter);
         for if_ in &node.ifs {
-            self.unparse_expr(if_)?;
+            self.unparse_expr(if_);
         }
-        Ok(())
     }
 
-    fn unparse_excepthandler(&mut self, node: &ExceptHandler<TextRange>) -> fmt::Result {
+    fn unparse_excepthandler(&mut self, node: &ExceptHandler<TextRange>) {
         match node {
             ExceptHandler::ExceptHandler(data) => self.unparse_excepthandler_except_handler(data),
         }
@@ -1100,145 +1020,136 @@ impl<'a> Unparser<'a> {
     fn unparse_excepthandler_except_handler(
         &mut self,
         node: &ExceptHandlerExceptHandler<TextRange>,
-    ) -> fmt::Result {
+    ) {
         if let Some(type_) = &node.type_ {
-            self.unparse_expr(type_)?;
+            self.unparse_expr(type_);
         }
         for stmt in &node.body {
-            self.unparse_stmt(stmt)?;
+            self.unparse_stmt(stmt);
         }
-        Ok(())
     }
 
-    fn unparse_arguments(&mut self, node: &Arguments<TextRange>) -> fmt::Result {
+    fn unparse_arguments(&mut self, node: &Arguments<TextRange>) {
         let mut posonly_iter = node.posonlyargs.iter().peekable();
         let mut args_iter = node.args.iter().peekable();
         let mut kw_iter = node.kwonlyargs.iter().peekable();
         while let Some(posonly) = posonly_iter.next() {
-            self.unparse_arg(posonly.as_arg())?;
+            self.unparse_arg(posonly.as_arg());
             if let Some(default) = &posonly.default {
-                self.write_str("=")?;
-                self.unparse_expr(default)?;
+                self.write_str("=");
+                self.unparse_expr(default);
             }
 
             if posonly_iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             } else if args_iter.peek().is_some()
                 || node.vararg.is_some()
                 || node.vararg.is_some()
                 || kw_iter.peek().is_some()
                 || node.kwarg.is_some()
             {
-                self.write_str(", /")?;
+                self.write_str(", /");
             }
         }
 
         while let Some(arg) = args_iter.next() {
-            self.unparse_arg(arg.as_arg())?;
+            self.unparse_arg(arg.as_arg());
             if let Some(default) = &arg.default {
-                self.write_str("=")?;
-                self.unparse_expr(default)?;
+                self.write_str("=");
+                self.unparse_expr(default);
             }
             if args_iter.peek().is_some()
                 || node.vararg.is_some()
                 || kw_iter.peek().is_some()
                 || node.kwarg.is_some()
             {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
 
         if let Some(vararg) = &node.vararg {
-            self.write_str("*")?;
-            self.write_str(&vararg.arg)?;
+            self.write_str("*");
+            self.write_str(&vararg.arg);
             if let Some(annotation) = &vararg.annotation {
-                self.write_str(": ")?;
-                self.unparse_expr(annotation)?;
+                self.write_str(": ");
+                self.unparse_expr(annotation);
             }
             if kw_iter.peek().is_some() || node.kwarg.is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
 
         while let Some(kw) = kw_iter.next() {
-            self.unparse_arg(kw.as_arg())?;
+            self.unparse_arg(kw.as_arg());
             if let Some(default) = &kw.default {
-                self.write_str("=")?;
-                self.unparse_expr(default)?;
+                self.write_str("=");
+                self.unparse_expr(default);
             }
             if kw_iter.peek().is_some() || node.kwarg.is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
 
         if let Some(kwarg) = &node.kwarg {
-            self.write_str("**")?;
-            self.write_str(&kwarg.arg)?;
+            self.write_str("**");
+            self.write_str(&kwarg.arg);
             if let Some(annotation) = &kwarg.annotation {
-                self.write_str(": ")?;
-                self.unparse_expr(&annotation)?;
+                self.write_str(": ");
+                self.unparse_expr(&annotation);
             }
         }
-
-        Ok(())
     }
 
-    fn unparse_arg(&mut self, node: &Arg<TextRange>) -> fmt::Result {
-        self.write_str(node.arg.as_str())?;
+    fn unparse_arg(&mut self, node: &Arg<TextRange>) {
+        self.write_str(node.arg.as_str());
         if let Some(annotation) = &node.annotation {
-            self.write_str(": ")?;
-            self.unparse_expr(annotation)?;
+            self.write_str(": ");
+            self.unparse_expr(annotation);
         }
-        Ok(())
     }
 
-    fn unparse_keyword(&mut self, node: &Keyword<TextRange>) -> fmt::Result {
+    fn unparse_keyword(&mut self, node: &Keyword<TextRange>) {
         if let Some(arg) = &node.arg {
-            self.write_str(arg.as_str())?;
-            self.write_str("=")?;
+            self.write_str(arg.as_str());
+            self.write_str("=");
         } else {
-            self.write_str("**")?;
+            self.write_str("**");
         }
 
-        self.unparse_expr(&node.value)?;
-        Ok(())
+        self.unparse_expr(&node.value);
     }
 
-    fn unparse_alias(&mut self, node: &Alias<TextRange>) -> fmt::Result {
-        self.write_str(node.name.as_str())?;
+    fn unparse_alias(&mut self, node: &Alias<TextRange>) {
+        self.write_str(node.name.as_str());
         if node.asname.is_some() {
-            self.write_str(&format!(" as {}", node.asname.as_ref().unwrap()))?;
+            self.write_str(&format!(" as {}", node.asname.as_ref().unwrap()));
         }
-        Ok(())
     }
 
-    fn unparse_withitem(&mut self, node: &WithItem<TextRange>) -> fmt::Result {
-        self.unparse_expr(&node.context_expr)?;
+    fn unparse_withitem(&mut self, node: &WithItem<TextRange>) {
+        self.unparse_expr(&node.context_expr);
         if let Some(var) = &node.optional_vars {
-            self.write_str(" as ")?;
-            self.unparse_expr(var)?;
+            self.write_str(" as ");
+            self.unparse_expr(var);
         }
-        Ok(())
     }
 
-    fn unparse_match_case(&mut self, node: &MatchCase<TextRange>) -> fmt::Result {
-        self.fill("case ")?;
-        self.unparse_pattern(&node.pattern)?;
+    fn unparse_match_case(&mut self, node: &MatchCase<TextRange>) {
+        self.fill("case ");
+        self.unparse_pattern(&node.pattern);
         if let Some(guard) = &node.guard {
-            self.write_str(" if ")?;
-            self.unparse_expr(&guard)?;
+            self.write_str(" if ");
+            self.unparse_expr(&guard);
         }
-        self.write_str(":")?;
+        self.write_str(":");
         self.block(|block_self| {
             for stmt in &node.body {
-                block_self.unparse_stmt(stmt)?;
+                block_self.unparse_stmt(stmt);
             }
-            Ok(())
-        })?;
-        Ok(())
+        });
     }
 
-    fn unparse_pattern(&mut self, node: &Pattern<TextRange>) -> fmt::Result {
+    fn unparse_pattern(&mut self, node: &Pattern<TextRange>) {
         match node {
             Pattern::MatchValue(data) => self.unparse_pattern_match_value(data),
             Pattern::MatchSingleton(data) => self.unparse_pattern_match_singleton(data),
@@ -1251,114 +1162,99 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    fn unparse_pattern_match_value(&mut self, node: &PatternMatchValue<TextRange>) -> fmt::Result {
+    fn unparse_pattern_match_value(&mut self, node: &PatternMatchValue<TextRange>) {
         self.unparse_expr(&node.value)
     }
 
-    fn unparse_pattern_match_singleton(
-        &mut self,
-        node: &PatternMatchSingleton<TextRange>,
-    ) -> fmt::Result {
+    fn unparse_pattern_match_singleton(&mut self, node: &PatternMatchSingleton<TextRange>) {
         self.write_str(node.value.as_str().unwrap())
     }
 
-    fn unparse_pattern_match_sequence(
-        &mut self,
-        node: &PatternMatchSequence<TextRange>,
-    ) -> fmt::Result {
+    fn unparse_pattern_match_sequence(&mut self, node: &PatternMatchSequence<TextRange>) {
         let mut patterns_iter = node.patterns.iter().peekable();
-        self.write_str("[")?;
+        self.write_str("[");
         while let Some(pattern) = patterns_iter.next() {
-            self.unparse_pattern(pattern)?;
+            self.unparse_pattern(pattern);
             if patterns_iter.peek().is_some() {
-                self.write_str(" , ")?;
+                self.write_str(" , ");
             }
         }
-        self.write_str("]")?;
-        Ok(())
+        self.write_str("]");
     }
 
-    fn unparse_pattern_match_mapping(
-        &mut self,
-        node: &PatternMatchMapping<TextRange>,
-    ) -> fmt::Result {
+    fn unparse_pattern_match_mapping(&mut self, node: &PatternMatchMapping<TextRange>) {
         let mut pairs_iter = node.keys.iter().zip(node.patterns.iter()).peekable();
-        self.write_str("{")?;
+        self.write_str("{");
         while let Some((key, pattern)) = pairs_iter.next() {
-            self.unparse_expr(key)?;
-            self.write_str(": ")?;
-            self.unparse_pattern(pattern)?;
+            self.unparse_expr(key);
+            self.write_str(": ");
+            self.unparse_pattern(pattern);
             if pairs_iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
         if let Some(rest) = &node.rest {
             if node.keys.len() > 0 {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
-            self.write_str("**")?;
-            self.write_str(rest.as_str())?;
+            self.write_str("**");
+            self.write_str(rest.as_str());
         }
 
-        self.write_str("}")?;
-        Ok(())
+        self.write_str("}");
     }
 
-    fn unparse_pattern_match_class(&mut self, node: &PatternMatchClass<TextRange>) -> fmt::Result {
+    fn unparse_pattern_match_class(&mut self, node: &PatternMatchClass<TextRange>) {
         let mut patterns_iter = node.patterns.iter().peekable();
         let mut kwd_iter = node
             .kwd_attrs
             .iter()
             .zip(node.kwd_patterns.iter())
             .peekable();
-        self.unparse_expr(&node.cls)?;
-        self.write_str("(")?;
+        self.unparse_expr(&node.cls);
+        self.write_str("(");
         while let Some(pattern) = patterns_iter.next() {
-            self.unparse_pattern(pattern)?;
+            self.unparse_pattern(pattern);
             if patterns_iter.peek().is_some() || kwd_iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
         while let Some((attr, pattern)) = kwd_iter.next() {
-            self.write_str(attr.as_str())?;
-            self.write_str("=")?;
-            self.unparse_pattern(pattern)?;
+            self.write_str(attr.as_str());
+            self.write_str("=");
+            self.unparse_pattern(pattern);
             if kwd_iter.peek().is_some() {
-                self.write_str(", ")?;
+                self.write_str(", ");
             }
         }
 
-        self.write_str(")")?;
-        Ok(())
+        self.write_str(")");
     }
 
-    fn unparse_pattern_match_star(&mut self, node: &PatternMatchStar<TextRange>) -> fmt::Result {
+    fn unparse_pattern_match_star(&mut self, node: &PatternMatchStar<TextRange>) {
         let name = match &node.name {
             Some(name) => name.as_str(),
             None => "_",
         };
-        self.write_str("*")?;
-        self.write_str(name)?;
-        Ok(())
+        self.write_str("*");
+        self.write_str(name);
     }
 
-    fn unparse_pattern_match_as(&mut self, _node: &PatternMatchAs<TextRange>) -> fmt::Result {
+    fn unparse_pattern_match_as(&mut self, _node: &PatternMatchAs<TextRange>) {
         // TODO
-        Ok(())
     }
 
-    fn unparse_pattern_match_or(&mut self, node: &PatternMatchOr<TextRange>) -> fmt::Result {
+    fn unparse_pattern_match_or(&mut self, node: &PatternMatchOr<TextRange>) {
         let mut patterns_iter = node.patterns.iter().peekable();
         while let Some(pattern) = patterns_iter.next() {
-            self.unparse_pattern(pattern)?;
+            self.unparse_pattern(pattern);
             if patterns_iter.peek().is_some() {
-                self.write_str(" | ")?;
+                self.write_str(" | ");
             }
         }
-        Ok(())
     }
 
-    fn unparse_type_param(&mut self, node: &TypeParam<TextRange>) -> fmt::Result {
+    fn unparse_type_param(&mut self, node: &TypeParam<TextRange>) {
         match node {
             TypeParam::TypeVar(data) => self.unparse_type_param_type_var(data),
             TypeParam::ParamSpec(data) => self.unparse_type_param_param_spec(data),
@@ -1366,30 +1262,21 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    fn unparse_type_param_type_var(&mut self, node: &TypeParamTypeVar<TextRange>) -> fmt::Result {
-        self.write_str(&node.name)?;
+    fn unparse_type_param_type_var(&mut self, node: &TypeParamTypeVar<TextRange>) {
+        self.write_str(&node.name);
         if let Some(bound) = &node.bound {
-            self.write_str(": ")?;
-            self.unparse_expr(bound)?;
+            self.write_str(": ");
+            self.unparse_expr(bound);
         }
-        Ok(())
     }
 
-    fn unparse_type_param_param_spec(
-        &mut self,
-        node: &TypeParamParamSpec<TextRange>,
-    ) -> fmt::Result {
-        self.write_str("**")?;
-        self.write_str(&node.name)?;
-        Ok(())
+    fn unparse_type_param_param_spec(&mut self, node: &TypeParamParamSpec<TextRange>) {
+        self.write_str("**");
+        self.write_str(&node.name);
     }
 
-    fn unparse_type_param_type_var_tuple(
-        &mut self,
-        node: &TypeParamTypeVarTuple<TextRange>,
-    ) -> fmt::Result {
-        self.write_str("*")?;
-        self.write_str(&node.name)?;
-        Ok(())
+    fn unparse_type_param_type_var_tuple(&mut self, node: &TypeParamTypeVarTuple<TextRange>) {
+        self.write_str("*");
+        self.write_str(&node.name);
     }
 }
