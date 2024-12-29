@@ -56,24 +56,24 @@ fn get_precedence(node: &Expr<TextRange>) -> usize {
 
 pub struct Unparser {
     pub source: String,
-    _indent: usize,
-    _in_try_star: bool,
-    _precedence_level: usize,
+    indent: usize,
+    in_try_star: bool,
+    precedence_level: usize,
 }
 
 impl Unparser {
     pub fn new() -> Self {
         Unparser {
-            _in_try_star: false,
-            _indent: 0,
-            _precedence_level: 0,
+            in_try_star: false,
+            indent: 0,
+            precedence_level: 0,
             source: String::new(),
         }
     }
 
     fn fill(&mut self, str_: &str) {
         if self.source.len() > 0 {
-            self.write_str(&("\n".to_owned() + &" ".repeat(self._indent * 4) + str_))
+            self.write_str(&("\n".to_owned() + &" ".repeat(self.indent * 4) + str_))
         } else {
             self.write_str(str_);
         }
@@ -87,17 +87,17 @@ impl Unparser {
     where
         F: FnOnce(&mut Self),
     {
-        self._indent += 1;
+        self.indent += 1;
         f(self);
-        self._indent -= 1;
+        self.indent -= 1;
     }
 
     fn delimit_precedence<F>(&mut self, node: &Expr<TextRange>, f: F)
     where
         F: FnOnce(&mut Self),
     {
-        self._precedence_level = get_precedence(node);
-        let should_delimit = get_precedence(node) > self._precedence_level;
+        self.precedence_level = get_precedence(node);
+        let should_delimit = get_precedence(node) > self.precedence_level;
         if should_delimit {
             self.write_str("(");
         }
@@ -489,8 +489,8 @@ impl Unparser {
     }
 
     fn unparse_stmt_try(&mut self, node: &StmtTry<TextRange>) {
-        let prev_try_star = self._in_try_star;
-        self._in_try_star = false;
+        let prev_try_star = self.in_try_star;
+        self.in_try_star = false;
         self.fill("try:");
         self.block(|block_self| {
             for stmt in &node.body {
@@ -519,11 +519,11 @@ impl Unparser {
                 }
             });
         }
-        self._in_try_star = prev_try_star;
+        self.in_try_star = prev_try_star;
     }
     fn unparse_stmt_try_star(&mut self, node: &StmtTryStar<TextRange>) {
-        let prev_try_star = self._in_try_star;
-        self._in_try_star = true;
+        let prev_try_star = self.in_try_star;
+        self.in_try_star = true;
         self.fill("try:");
         self.block(|block_self| {
             for stmt in &node.body {
@@ -552,7 +552,7 @@ impl Unparser {
                 }
             });
         }
-        self._in_try_star = prev_try_star;
+        self.in_try_star = prev_try_star;
     }
     fn unparse_stmt_assert(&mut self, node: &StmtAssert<TextRange>) {
         self.fill("assert ");
@@ -648,7 +648,7 @@ impl Unparser {
     }
 
     fn unparse_expr_bool_op(&mut self, node: &ExprBoolOp<TextRange>) {
-        let prev_precedence_level = self._precedence_level;
+        let prev_precedence_level = self.precedence_level;
         let operator = match node.op {
             BoolOp::And => " and ",
             BoolOp::Or => " or ",
@@ -659,7 +659,7 @@ impl Unparser {
         let mut values_iter = node.values.iter().peekable();
         self.delimit_precedence(&enum_member, |block_self| {
             while let Some(expr) = values_iter.next() {
-                block_self._precedence_level += 1;
+                block_self.precedence_level += 1;
                 block_self.unparse_expr(expr);
                 if values_iter.peek().is_some() {
                     block_self.write_str(&operator);
@@ -667,7 +667,7 @@ impl Unparser {
             }
         });
 
-        self._precedence_level = prev_precedence_level;
+        self.precedence_level = prev_precedence_level;
     }
 
     fn unparse_expr_named_expr(&mut self, node: &ExprNamedExpr<TextRange>) {
