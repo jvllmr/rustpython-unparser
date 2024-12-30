@@ -15,6 +15,7 @@ mod tests {
     use std::fs;
     use std::io;
     use std::path::Path;
+    use std::process::Command;
 
     struct RangesEraser {}
 
@@ -38,14 +39,18 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_predefined_files() -> io::Result<()> {
-        for entry in fs::read_dir("./test_files")? {
+    fn run_tests_on_folders(source_folder: &str, results_folder: &str) -> io::Result<()> {
+        for entry in fs::read_dir(source_folder)? {
             let entry = entry?;
 
             let entry_path = entry.path();
 
-            if entry_path.is_file() {
+            if entry_path.is_file()
+                && entry_path.file_name().is_some_and(|name| {
+                    name.to_str()
+                        .is_some_and(|inner_name| inner_name.ends_with(".py"))
+                })
+            {
                 let file_content = fs::read_to_string(&entry_path)?;
                 let entry_path_str = entry_path.to_str().unwrap();
                 let mut unparser = Unparser::new();
@@ -56,7 +61,7 @@ mod tests {
                 let new_source = unparser.source;
                 let old_file_name = entry_path.file_name().unwrap().to_str().unwrap();
                 let new_file_name = old_file_name.replace(".py", "_unparsed.py");
-                let new_entry_path_str = format!("./test_files_unparsed/{}", new_file_name);
+                let new_entry_path_str = format!("{}/{}", results_folder, new_file_name);
                 let new_entry_path = Path::new(&new_entry_path_str);
                 fs::write(&new_entry_path, &new_source)?;
                 let new_stmts =
@@ -78,6 +83,32 @@ mod tests {
                 }
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_predefined_files() -> io::Result<()> {
+        run_tests_on_folders("./test_files", "./test_files_unparsed")
+    }
+    #[test]
+    #[ignore = "Fuzzy tests are unstable and should only be used to explore new test cases"]
+    fn test_fuzzy_files() -> io::Result<()> {
+        let seed = rand::random::<usize>();
+
+        for i in 0..10 {
+            let file_name = format!("./fuzzy_test_files/fuzzy_test{}.py", i);
+
+            let file_content = Command::new(".venv/bin/python")
+                .arg("-m")
+                .arg("pysource_codegen")
+                .arg("--seed")
+                .arg(&seed.to_string())
+                .output()
+                .expect("failed to execute process");
+            fs::write(&file_name, &file_content.stdout)?;
+        }
+
+        run_tests_on_folders("./fuzzy_test_files", "./fuzzy_test_files_unparsed")?;
         Ok(())
     }
 }

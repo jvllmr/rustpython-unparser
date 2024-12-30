@@ -414,6 +414,7 @@ dependencies = [
 name = "rustpython-unparser"
 version = "0.1.0"
 dependencies = [
+ "rand",
  "rustpython-ast",
  "rustpython-parser",
 ]

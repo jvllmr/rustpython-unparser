@@ -1,0 +1,15 @@
+[project]
+name = "rustpython-unparser"
+version = "0.1.0"
+description = "Default template for PDM package"
+authors = [
+    {name = "Jan Vollmer", email = "jan@vllmr.dev"},
+]
+dependencies = ["pysource-codegen>=0.6.0"]
+requires-python = ">=3.10"
+readme = "README.md"
+license = {text = "MIT"}
+
+
+[tool.pdm]
+distribution = false

@@ -790,14 +790,17 @@ impl Unparser {
         for generator in &node.generators {
             self.unparse_comprehension(generator);
         }
+        self.write_str("}");
     }
 
     fn unparse_expr_generator_exp(&mut self, node: &ExprGeneratorExp<TextRange>) {
+        self.write_str("(");
         self.unparse_expr(&node.elt);
 
         for generator in &node.generators {
             self.unparse_comprehension(generator);
         }
+        self.write_str(")");
     }
 
     fn unparse_expr_await(&mut self, node: &ExprAwait<TextRange>) {
@@ -1023,9 +1026,9 @@ impl Unparser {
 
     fn unparse_comprehension(&mut self, node: &Comprehension<TextRange>) {
         if node.is_async {
-            self.write_str("async for");
+            self.write_str(" async for ");
         } else {
-            self.write_str("for");
+            self.write_str(" for ");
         }
         self.unparse_expr(&node.target);
         self.write_str(" in ");
@@ -1045,12 +1048,21 @@ impl Unparser {
         &mut self,
         node: &ExceptHandlerExceptHandler<TextRange>,
     ) {
+        self.fill("except");
+        if self.in_try_star {
+            self.write_str("*")
+        }
+
         if let Some(type_) = &node.type_ {
+            self.write_str(" ");
             self.unparse_expr(type_);
         }
-        for stmt in &node.body {
-            self.unparse_stmt(stmt);
-        }
+        self.write_str(":");
+        self.block(|block_self| {
+            for stmt in &node.body {
+                block_self.unparse_stmt(stmt);
+            }
+        });
     }
 
     fn unparse_arguments(&mut self, node: &Arguments<TextRange>) {
