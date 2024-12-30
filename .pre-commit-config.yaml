@@ -1,3 +1,7 @@
+ci:
+  skip:
+    - cargo-fix
+
 repos:
   - repo: https://github.com/jvllmr/pre-commit-cargo
     rev: c8489dd
