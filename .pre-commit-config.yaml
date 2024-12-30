@@ -4,8 +4,15 @@ ci:
 
 repos:
   - repo: https://github.com/jvllmr/pre-commit-cargo
-    rev: c8489dd
+    rev: c8489ddc7d198af94135f31c3a70cf708e98f069
     hooks:
       - id: cargo-fix
       - id: cargo-fmt
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: "v0.8.4"
+    hooks:
+      - id: ruff
+        args:
+          - --fix
+      - id: ruff-format
       

@@ -121,7 +121,7 @@ impl Unparser {
             Stmt::For(data) => self.unparse_stmt_for(data),
             Stmt::AsyncFor(data) => self.unparse_stmt_async_for(data),
             Stmt::While(data) => self.unparse_stmt_while(data),
-            Stmt::If(data) => self.unparse_stmt_if(data),
+            Stmt::If(data) => self.unparse_stmt_if(data, false),
             Stmt::With(data) => self.unparse_stmt_with(data),
             Stmt::AsyncWith(data) => self.unparse_stmt_async_with(data),
             Stmt::Match(data) => self.unparse_stmt_match(data),
@@ -401,8 +401,13 @@ impl Unparser {
         }
     }
 
-    fn unparse_stmt_if(&mut self, node: &StmtIf<TextRange>) {
-        self.fill("if ");
+    fn unparse_stmt_if(&mut self, node: &StmtIf<TextRange>, inner_if: bool) {
+        if inner_if {
+            self.fill("elif ");
+        } else {
+            self.fill("if ");
+        }
+
         self.unparse_expr(&node.test);
         self.write_str(":");
         self.block(|block_self| {
@@ -412,14 +417,7 @@ impl Unparser {
         });
         match node.orelse.as_slice() {
             [Stmt::If(inner_if)] => {
-                self.fill("elif ");
-                self.unparse_expr(&inner_if.test);
-                self.write_str(":");
-                self.block(|block_self| {
-                    for stmt in &inner_if.body {
-                        block_self.unparse_stmt(stmt);
-                    }
-                });
+                self.unparse_stmt_if(inner_if, true);
             }
             [] => {}
             _ => {
@@ -951,8 +949,9 @@ impl Unparser {
     }
 
     fn unparse_expr_attribute(&mut self, node: &ExprAttribute<TextRange>) {
+        self.unparse_expr(&node.value);
         self.write_str(".");
-        self.unparse_expr(&node.value)
+        self.write_str(&node.attr);
     }
     fn unparse_expr_subscript(&mut self, node: &ExprSubscript<TextRange>) {
         self.unparse_expr(&node.value);

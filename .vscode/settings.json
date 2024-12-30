@@ -2,5 +2,9 @@
 	"cSpell.words": [
 		"unparse",
 		"Unparser"
-	]
+	],
+	"editor.formatOnSave": true,
+	"[python]": {
+		"editor.defaultFormatter": "charliermarsh.ruff"
+	}
 }
