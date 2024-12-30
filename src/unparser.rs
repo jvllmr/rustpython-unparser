@@ -914,7 +914,7 @@ impl Unparser {
                 let mut values_iter = values.iter().peekable();
                 while let Some(value) = values_iter.next() {
                     self._unparse_constant(value);
-                    if values_iter.peek().is_some() {
+                    if values_iter.peek().is_some() || values.len() == 1 {
                         self.write_str(", ");
                     }
                 }
@@ -982,6 +982,9 @@ impl Unparser {
         self.write_str("(");
         while let Some(expr) = elts_iter.next() {
             self.unparse_expr(expr);
+            if elts_iter.peek().is_some() || node.elts.len() == 1 {
+                self.write_str(", ");
+            }
         }
         self.write_str(")");
     }
