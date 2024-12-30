@@ -5,12 +5,39 @@ pub use crate::unparser::Unparser;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rustpython_ast::text_size::TextRange;
+    use rustpython_ast::Fold;
+
+    use rustpython_ast::TextSize;
     use rustpython_parser::ast::Suite;
     use rustpython_parser::Parse;
 
     use std::fs;
     use std::io;
     use std::path::Path;
+
+    struct RangesEraser {}
+
+    impl Fold<TextRange> for RangesEraser {
+        type TargetU = TextRange;
+
+        type Error = std::convert::Infallible;
+
+        type UserContext = TextRange;
+
+        fn will_map_user(&mut self, _user: &TextRange) -> Self::UserContext {
+            TextRange::new(TextSize::new(0), TextSize::new(0))
+        }
+
+        fn map_user(
+            &mut self,
+            _user: TextRange,
+            start: Self::UserContext,
+        ) -> Result<Self::TargetU, Self::Error> {
+            Ok(start)
+        }
+    }
+
     #[test]
     fn test_predefined_files() -> io::Result<()> {
         for entry in fs::read_dir("./test_files")? {
@@ -34,7 +61,19 @@ mod tests {
                 fs::write(&new_entry_path, &new_source)?;
                 let new_stmts =
                     Suite::parse(&new_source, new_entry_path.to_str().unwrap()).unwrap();
-                for (stmt, new_stmt) in stmts.iter().zip(new_stmts.iter()) {
+                // erase range information
+                let mut eraser = RangesEraser {};
+                let mut erased_new_stmts = Vec::new();
+                for stmt in &new_stmts {
+                    erased_new_stmts.push(eraser.fold_stmt(stmt.to_owned()).unwrap());
+                }
+
+                let mut erased_stmts = Vec::new();
+                for stmt in &stmts {
+                    erased_stmts.push(eraser.fold_stmt(stmt.to_owned()).unwrap());
+                }
+
+                for (stmt, new_stmt) in erased_stmts.iter().zip(erased_new_stmts.iter()) {
                     assert_eq!(stmt, new_stmt)
                 }
             }

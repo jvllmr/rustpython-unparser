@@ -858,6 +858,7 @@ impl Unparser {
         self.unparse_expr(&node.func);
         let mut args_iter = node.args.iter().peekable();
         let mut keywords_iter = node.keywords.iter().peekable();
+        self.write_str("(");
         while let Some(arg) = args_iter.next() {
             self.unparse_expr(arg);
             if args_iter.peek().is_some() || keywords_iter.peek().is_some() {
@@ -870,6 +871,7 @@ impl Unparser {
                 self.write_str(", ");
             }
         }
+        self.write_str(")");
     }
 
     fn unparse_expr_formatted_value(&mut self, node: &ExprFormattedValue<TextRange>) {
@@ -915,7 +917,7 @@ impl Unparser {
                 self.write_str(&utf8.unwrap());
             }
             Constant::Int(value) => self.write_str(&value.to_string()),
-            Constant::Str(value) => self.write_str(value),
+            Constant::Str(value) => self.write_str(&format!("\"{}\"", value)),
             Constant::None => self.write_str("None"),
             Constant::Complex { real, imag: _ } => self.write_str(&real.to_string()),
             Constant::Float(value) => self.write_str(&value.to_string()),
