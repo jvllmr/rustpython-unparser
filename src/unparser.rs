@@ -875,7 +875,6 @@ impl Unparser {
     }
 
     fn unparse_expr_formatted_value(&mut self, node: &ExprFormattedValue<TextRange>) {
-        // TODO
         self.write_str("{");
         let mut inner_unparser = Unparser::new();
         inner_unparser.unparse_expr(&node.value);
