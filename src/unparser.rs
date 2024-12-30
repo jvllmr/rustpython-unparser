@@ -876,18 +876,38 @@ impl Unparser {
 
     fn unparse_expr_formatted_value(&mut self, node: &ExprFormattedValue<TextRange>) {
         // TODO
-        self.write_str("{ ");
-        self.unparse_expr(&node.value);
+        self.write_str("{");
+        let mut inner_unparser = Unparser::new();
+        inner_unparser.unparse_expr(&node.value);
+        let inner_expr = inner_unparser.source.as_str();
+        if inner_expr.starts_with("{") {
+            self.write_str(" ");
+        }
+        self.write_str(inner_expr);
 
         if let Some(format_spec) = &node.format_spec {
             self.write_str(":");
             self.unparse_expr(format_spec);
         }
-        self.write_str(" }");
+        self.write_str("}");
     }
 
-    fn unparse_expr_joined_str(&mut self, _node: &ExprJoinedStr<TextRange>) {
-        // TODO
+    fn unparse_expr_joined_str(&mut self, node: &ExprJoinedStr<TextRange>) {
+        self.write_str("f");
+
+        for (index, expr) in node.values.iter().enumerate() {
+            let mut inner_unparser = Unparser::new();
+            inner_unparser.unparse_expr(expr);
+            let mut expr_source = inner_unparser.source.as_str();
+            if index > 0 {
+                expr_source = expr_source.trim_start_matches("\"")
+            }
+
+            if index != node.values.len() - 1 {
+                expr_source = expr_source.trim_end_matches("\"")
+            }
+            self.write_str(&expr_source);
+        }
     }
 
     fn _unparse_constant(&mut self, constant: &Constant) {
