@@ -930,8 +930,9 @@ impl Unparser {
             }
             Constant::Bytes(value) => {
                 let utf8 = String::from_utf8(value.to_owned());
-
+                self.write_str("b\"");
                 self.write_str(&utf8.unwrap());
+                self.write_str("\"");
             }
             Constant::Int(value) => self.write_str(&value.to_string()),
             Constant::Str(value) => self.write_str(&format!("\"{}\"", value)),
