@@ -15,42 +15,71 @@ use rustpython_ast::{
 };
 use rustpython_ast::{Constant, Int};
 
+enum Precedence {
+    NamedExpr = 1,
+    Tuple = 2,
+    Yield = 3,
+    Test = 4,
+    Or = 5,
+    And = 6,
+    Not = 7,
+    Cmp = 8,
+
+    Bor = 9,
+    Bxor = 10,
+    Band = 11,
+    Shift = 12,
+    Arith = 13,
+    Term = 14,
+    Factor = 15,
+    Power = 16,
+    Await = 17,
+    Atom = 18,
+}
+
+impl Precedence {
+    fn value(self) -> usize {
+        self as usize
+    }
+}
+const EXPR_PRECEDENCE: usize = 9;
+
 fn get_precedence(node: &Expr<TextRange>) -> usize {
     match node {
-        Expr::NamedExpr(_) => 1,
-        Expr::Tuple(_) => 2,
-        Expr::Yield(_) => 3,
-        Expr::YieldFrom(_) => 3,
-        Expr::IfExp(_) => 4,
-        Expr::Lambda(_) => 4,
+        Expr::NamedExpr(_) => Precedence::NamedExpr.value(),
+        Expr::Tuple(_) => Precedence::Tuple.value(),
+        Expr::Yield(_) => Precedence::Yield.value(),
+        Expr::YieldFrom(_) => Precedence::Yield.value(),
+        Expr::IfExp(_) => Precedence::Test.value(),
+        Expr::Lambda(_) => Precedence::Test.value(),
         Expr::BoolOp(data) => match data.op {
-            BoolOp::Or => 5,
-            BoolOp::And => 6,
+            BoolOp::Or => Precedence::Or.value(),
+            BoolOp::And => Precedence::And.value(),
         },
         Expr::UnaryOp(data) => match data.op {
-            UnaryOp::Not => 7,
-            UnaryOp::UAdd => 15,
-            UnaryOp::USub => 15,
-            UnaryOp::Invert => 15,
+            UnaryOp::Not => Precedence::Not.value(),
+            UnaryOp::UAdd => Precedence::Factor.value(),
+            UnaryOp::USub => Precedence::Factor.value(),
+            UnaryOp::Invert => Precedence::Factor.value(),
         },
-        Expr::Compare(_) => 8,
+        Expr::Compare(_) => Precedence::Cmp.value(),
         Expr::BinOp(data) => match data.op {
-            Operator::BitOr => 9,
-            Operator::BitXor => 10,
-            Operator::BitAnd => 11,
-            Operator::LShift => 12,
-            Operator::RShift => 12,
-            Operator::Add => 13,
-            Operator::Sub => 13,
-            Operator::Div => 14,
-            Operator::FloorDiv => 14,
-            Operator::Mult => 14,
-            Operator::MatMult => 14,
-            Operator::Mod => 14,
-            Operator::Pow => 16,
+            Operator::BitOr => Precedence::Bor.value(),
+            Operator::BitXor => Precedence::Bxor.value(),
+            Operator::BitAnd => Precedence::Band.value(),
+            Operator::LShift => Precedence::Shift.value(),
+            Operator::RShift => Precedence::Shift.value(),
+            Operator::Add => Precedence::Arith.value(),
+            Operator::Sub => Precedence::Arith.value(),
+            Operator::Div => Precedence::Term.value(),
+            Operator::FloorDiv => Precedence::Term.value(),
+            Operator::Mult => Precedence::Term.value(),
+            Operator::MatMult => Precedence::Term.value(),
+            Operator::Mod => Precedence::Term.value(),
+            Operator::Pow => Precedence::Power.value(),
         },
-        Expr::Await(_) => 17,
-        _ => 4,
+        Expr::Await(_) => Precedence::Await.value(),
+        _ => Precedence::Test.value(),
     }
 }
 
@@ -66,7 +95,7 @@ impl Unparser {
         Unparser {
             in_try_star: false,
             indent: 0,
-            precedence_level: 0,
+            precedence_level: Precedence::Test.value(),
             source: String::new(),
         }
     }
@@ -96,8 +125,7 @@ impl Unparser {
     where
         F: FnOnce(&mut Self),
     {
-        self.precedence_level = get_precedence(node);
-        let should_delimit = get_precedence(node) > self.precedence_level;
+        let should_delimit = self.precedence_level > get_precedence(node);
         if should_delimit {
             self.write_str("(");
         }
@@ -105,6 +133,26 @@ impl Unparser {
         if should_delimit {
             self.write_str(")");
         }
+    }
+
+    fn with_precedence<F>(&mut self, prec: Precedence, f: F)
+    where
+        F: FnOnce(&mut Self),
+    {
+        let prev_prec = self.precedence_level;
+        self.precedence_level = prec.value();
+        f(self);
+        self.precedence_level = prev_prec;
+    }
+
+    fn with_precedence_num<F>(&mut self, prec: usize, f: F)
+    where
+        F: FnOnce(&mut Self),
+    {
+        let prev_prec = self.precedence_level;
+        self.precedence_level = prec;
+        f(self);
+        self.precedence_level = prev_prec;
     }
 
     pub fn unparse_stmt(&mut self, node: &Stmt<TextRange>) {
@@ -228,7 +276,7 @@ impl Unparser {
             self.unparse_expr(decorator);
         }
 
-        self.fill("class");
+        self.fill("class ");
         self.write_str(&node.name);
 
         if node.type_params.len() > 0 {
@@ -291,7 +339,10 @@ impl Unparser {
         let mut targets_iter = node.targets.iter().peekable();
         self.fill("");
         while let Some(target) = targets_iter.next() {
-            self.unparse_expr(target);
+            self.with_precedence(Precedence::Tuple, |prec_self| {
+                prec_self.unparse_expr(target);
+            });
+
             if targets_iter.peek().is_some() {
                 self.write_str(", ");
             }
@@ -610,7 +661,9 @@ impl Unparser {
     }
     fn unparse_stmt_expr(&mut self, node: &StmtExpr<TextRange>) {
         self.fill("");
-        self.unparse_expr(&node.value);
+        self.with_precedence(Precedence::Yield, |block_self| {
+            block_self.unparse_expr(&node.value);
+        });
     }
 
     pub fn unparse_expr(&mut self, node: &Expr<TextRange>) {
@@ -646,34 +699,35 @@ impl Unparser {
     }
 
     fn unparse_expr_bool_op(&mut self, node: &ExprBoolOp<TextRange>) {
-        let prev_precedence_level = self.precedence_level;
+        let enum_member = Expr::BoolOp(node.to_owned());
+        let mut operator_precedence = get_precedence(&enum_member);
         let operator = match node.op {
             BoolOp::And => " and ",
             BoolOp::Or => " or ",
         };
 
-        let enum_member = Expr::BoolOp(node.to_owned());
-
         let mut values_iter = node.values.iter().peekable();
         self.delimit_precedence(&enum_member, |block_self| {
             while let Some(expr) = values_iter.next() {
-                block_self.precedence_level += 1;
-                block_self.unparse_expr(expr);
+                operator_precedence += 1;
+                block_self.with_precedence_num(operator_precedence, |prec_self| {
+                    prec_self.unparse_expr(expr);
+                });
                 if values_iter.peek().is_some() {
-                    block_self.write_str(&operator);
+                    block_self.write_str(operator);
                 }
             }
         });
-
-        self.precedence_level = prev_precedence_level;
     }
 
     fn unparse_expr_named_expr(&mut self, node: &ExprNamedExpr<TextRange>) {
         let enum_member = Expr::NamedExpr(node.to_owned());
         self.delimit_precedence(&enum_member, |block_self| {
-            block_self.unparse_expr(&node.target);
-            block_self.write_str(" := ");
-            block_self.unparse_expr(&node.value);
+            block_self.with_precedence(Precedence::Atom, |prec_self| {
+                prec_self.unparse_expr(&node.target);
+                prec_self.write_str(" := ");
+                prec_self.unparse_expr(&node.value);
+            });
         })
     }
 
@@ -807,7 +861,9 @@ impl Unparser {
         let enum_member = Expr::Await(node.to_owned());
         self.delimit_precedence(&enum_member, |block_self| {
             block_self.write_str("await ");
-            block_self.unparse_expr(&node.value);
+            block_self.with_precedence(Precedence::Atom, |prec_self| {
+                prec_self.unparse_expr(&node.value);
+            });
         })
     }
 
@@ -817,7 +873,9 @@ impl Unparser {
             block_self.write_str("yield");
             if let Some(expr) = &node.value {
                 block_self.write_str(" ");
-                block_self.unparse_expr(expr);
+                block_self.with_precedence(Precedence::Atom, |prec_self| {
+                    prec_self.unparse_expr(expr);
+                });
             }
         })
     }
@@ -827,7 +885,9 @@ impl Unparser {
         self.delimit_precedence(&enum_member, |block_self| {
             block_self.write_str("yield from ");
 
-            block_self.unparse_expr(&node.value);
+            block_self.with_precedence(Precedence::Atom, |prec_self| {
+                prec_self.unparse_expr(&node.value);
+            });
         })
     }
 
@@ -894,7 +954,9 @@ impl Unparser {
 
     fn unparse_expr_joined_str(&mut self, node: &ExprJoinedStr<TextRange>) {
         self.write_str("f");
-
+        if node.values.len() == 0 {
+            self.write_str("\"\"");
+        }
         for (index, expr) in node.values.iter().enumerate() {
             let mut inner_unparser = Unparser::new();
             inner_unparser.unparse_expr(expr);
