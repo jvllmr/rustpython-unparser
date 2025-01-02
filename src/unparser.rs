@@ -1068,6 +1068,9 @@ impl Unparser {
         self.write_str("[");
         while let Some(expr) = elts_iter.next() {
             self.unparse_expr(expr);
+            if elts_iter.peek().is_some() {
+                self.write_str(", ");
+            }
         }
         self.write_str("]");
     }
@@ -1149,6 +1152,11 @@ impl Unparser {
             self.write_str(" ");
             self.unparse_expr(type_);
         }
+        if let Some(name) = &node.name {
+            self.write_str(" as ");
+            self.write_str(name);
+        }
+
         self.write_str(":");
         self.block(|block_self| {
             for stmt in &node.body {
@@ -1176,7 +1184,7 @@ impl Unparser {
                 || kw_iter.peek().is_some()
                 || node.kwarg.is_some()
             {
-                self.write_str(", /");
+                self.write_str(", / ");
             }
         }
 
