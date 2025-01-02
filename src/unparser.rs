@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use rustpython_ast::{
     text_size::TextRange, Alias, Arg, Arguments, BoolOp, CmpOp, Comprehension, ExceptHandler,
     ExceptHandlerExceptHandler, Expr, ExprAttribute, ExprAwait, ExprBinOp, ExprBoolOp, ExprCall,
@@ -13,7 +15,7 @@ use rustpython_ast::{
     StmtWhile, StmtWith, TypeParam, TypeParamParamSpec, TypeParamTypeVar, TypeParamTypeVarTuple,
     UnaryOp, WithItem,
 };
-use rustpython_ast::{Constant, Int};
+use rustpython_ast::{Constant, ConversionFlag, Int};
 
 enum Precedence {
     NamedExpr = 1,
@@ -42,6 +44,8 @@ impl Precedence {
         self as usize
     }
 }
+
+#[allow(dead_code)]
 const EXPR_PRECEDENCE: usize = 9;
 
 fn get_precedence(node: &Expr<TextRange>) -> usize {
@@ -686,7 +690,7 @@ impl Unparser {
             Expr::Compare(data) => self.unparse_expr_compare(data),
             Expr::Call(data) => self.unparse_expr_call(data),
             Expr::FormattedValue(data) => self.unparse_expr_formatted_value(data),
-            Expr::JoinedStr(data) => self.unparse_expr_joined_str(data),
+            Expr::JoinedStr(data) => self.unparse_expr_joined_str(data, false),
             Expr::Constant(data) => self.unparse_expr_constant(data),
             Expr::Attribute(data) => self.unparse_expr_attribute(data),
             Expr::Subscript(data) => self.unparse_expr_subscript(data),
@@ -944,31 +948,57 @@ impl Unparser {
             self.write_str(" ");
         }
         self.write_str(inner_expr);
-
+        if node.conversion != ConversionFlag::None {
+            self.write_str("!");
+            let buf = &[node.conversion as u8];
+            let c = std::str::from_utf8(buf).unwrap();
+            self.write_str(c);
+        }
         if let Some(format_spec) = &node.format_spec {
             self.write_str(":");
-            self.unparse_expr(format_spec);
+            match format_spec.deref() {
+                Expr::JoinedStr(joined_str) => {
+                    if joined_str.values.len() > 0 {
+                        self.unparse_expr_joined_str(joined_str, true);
+                    }
+                }
+                _ => self.unparse_expr(&format_spec),
+            };
         }
         self.write_str("}");
     }
 
-    fn unparse_expr_joined_str(&mut self, node: &ExprJoinedStr<TextRange>) {
-        self.write_str("f");
-        if node.values.len() == 0 {
-            self.write_str("\"\"");
+    fn unparse_expr_joined_str(&mut self, node: &ExprJoinedStr<TextRange>, is_spec: bool) {
+        if !is_spec {
+            self.write_str("f");
         }
-        for (index, expr) in node.values.iter().enumerate() {
+        let mut expr_source = String::new();
+        for expr in node.values.iter() {
             let mut inner_unparser = Unparser::new();
-            inner_unparser.unparse_expr(expr);
-            let mut expr_source = inner_unparser.source.as_str();
-            if index > 0 {
-                expr_source = expr_source.trim_start_matches("\"")
+            match expr {
+                Expr::Constant(ExprConstant { value, .. }) => {
+                    if let Constant::Str(str_) = value {
+                        inner_unparser.write_str(str_);
+                    } else {
+                        unreachable!()
+                    }
+                }
+                _ => {
+                    inner_unparser.unparse_expr(expr);
+                }
             }
 
-            if index != node.values.len() - 1 {
-                expr_source = expr_source.trim_end_matches("\"")
-            }
+            expr_source += inner_unparser.source.as_str();
+        }
+
+        if is_spec {
             self.write_str(&expr_source);
+        } else {
+            let escaped_source = rustpython_literal::escape::UnicodeEscape::new_repr(&expr_source)
+                .str_repr()
+                .to_string()
+                .unwrap();
+            self.write_str(&escaped_source);
         }
     }
 
