@@ -1368,8 +1368,32 @@ impl Unparser {
         self.write_str(name);
     }
 
-    fn unparse_pattern_match_as(&mut self, _node: &PatternMatchAs<TextRange>) {
-        // TODO
+    fn unparse_pattern_match_as(&mut self, node: &PatternMatchAs<TextRange>) {
+        match &node.name {
+            Some(name) => match &node.pattern {
+                Some(pattern) => {
+                    let with_parens = self.precedence_level > Precedence::Test.value();
+                    if with_parens {
+                        self.write_str("(");
+                    }
+                    self.with_precedence(Precedence::Bor, |prec_self| {
+                        prec_self.unparse_pattern(pattern);
+                    });
+                    self.write_str(" as ");
+                    self.write_str(name);
+
+                    if with_parens {
+                        self.write_str(")");
+                    }
+                }
+                None => {
+                    self.write_str(name);
+                }
+            },
+            None => {
+                self.write_str("_");
+            }
+        };
     }
 
     fn unparse_pattern_match_or(&mut self, node: &PatternMatchOr<TextRange>) {
