@@ -16,3 +16,4 @@ rustpython-literal = ">=0.4.0"
 rustpython-parser = "0.4.0"
 rustpython-ast = { version = "0.4.0", features = ["fold"] }
 rand = "0.8.5"
+pretty_assertions = "1.4.1"

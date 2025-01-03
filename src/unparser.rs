@@ -116,6 +116,13 @@ impl Unparser {
         self.source += str_
     }
 
+    fn write_type_comment(&mut self, type_comment: &Option<String>) {
+        if let Some(str_) = type_comment {
+            self.write_str("  # type: ignore");
+            self.write_str(str_);
+        }
+    }
+
     fn block<F>(&mut self, f: F)
     where
         F: FnOnce(&mut Self),
@@ -233,6 +240,7 @@ impl Unparser {
             self.unparse_expr(&returns);
         }
         self.write_str(":");
+        self.write_type_comment(&node.type_comment);
         self.block(|block_self| {
             for value in &node.body {
                 block_self.unparse_stmt(&value);
@@ -268,6 +276,7 @@ impl Unparser {
             self.unparse_expr(&returns);
         }
         self.write_str(":");
+        self.write_type_comment(&node.type_comment);
         self.block(|block_self| {
             for value in &node.body {
                 block_self.unparse_stmt(&value);
@@ -359,9 +368,7 @@ impl Unparser {
         }
         self.write_str(" = ");
         self.unparse_expr(&node.value);
-        if node.type_comment.is_some() {
-            self.write_str(&node.type_comment.as_ref().unwrap());
-        }
+        self.write_type_comment(&node.type_comment);
     }
 
     fn unparse_stmt_type_alias(&mut self, node: &StmtTypeAlias<TextRange>) {
@@ -408,10 +415,7 @@ impl Unparser {
         self.write_str(" in ");
         self.unparse_expr(&node.iter);
         self.write_str(":");
-        if let Some(type_comment) = &node.type_comment {
-            self.write_str(" #type: ignore");
-            self.write_str(type_comment);
-        }
+        self.write_type_comment(&node.type_comment);
         self.block(|block_self| {
             for value in &node.body {
                 block_self.unparse_stmt(value);
@@ -432,10 +436,7 @@ impl Unparser {
         self.write_str(" in ");
         self.unparse_expr(&node.iter);
         self.write_str(":");
-        if let Some(type_comment) = &node.type_comment {
-            self.write_str(" #type: ignore");
-            self.write_str(type_comment);
-        }
+        self.write_type_comment(&node.type_comment);
         self.block(|block_self| {
             for value in &node.body {
                 block_self.unparse_stmt(value);
@@ -992,7 +993,8 @@ impl Unparser {
             match expr {
                 Expr::Constant(ExprConstant { value, .. }) => {
                     if let Constant::Str(str_) = value {
-                        inner_unparser.write_str(str_);
+                        let escaped = str_.replace('{', "{{").replace('}', "}}");
+                        inner_unparser.write_str(&escaped);
                     } else {
                         unreachable!()
                     }
@@ -1202,14 +1204,11 @@ impl Unparser {
 
             if posonly_iter.peek().is_some() {
                 self.write_str(", ");
-            } else if args_iter.peek().is_some()
-                || node.vararg.is_some()
-                || node.vararg.is_some()
-                || kw_iter.peek().is_some()
-                || node.kwarg.is_some()
-            {
-                self.write_str(", /, ");
             }
+        }
+
+        if node.posonlyargs.len() > 0 {
+            self.write_str(", /,");
         }
 
         while let Some(arg) = args_iter.next() {
@@ -1230,6 +1229,7 @@ impl Unparser {
         if let Some(vararg) = &node.vararg {
             self.write_str("*");
             self.write_str(&vararg.arg);
+
             if let Some(annotation) = &vararg.annotation {
                 self.write_str(": ");
                 self.unparse_expr(annotation);
@@ -1237,6 +1237,8 @@ impl Unparser {
             if kw_iter.peek().is_some() || node.kwarg.is_some() {
                 self.write_str(", ");
             }
+        } else if node.kwonlyargs.len() > 0 {
+            self.write_str("*, ");
         }
 
         while let Some(kw) = kw_iter.next() {
