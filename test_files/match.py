@@ -8,6 +8,8 @@ class MatchThis:
 
 
 match {name_5: name_2}:
+    case None:
+        pass
     case [value_1, *rest] if []:
         print(value_1, *rest)
     case (value_1, *rest) if []:

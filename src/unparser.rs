@@ -1327,7 +1327,7 @@ impl Unparser {
     }
 
     fn unparse_pattern_match_singleton(&mut self, node: &PatternMatchSingleton<TextRange>) {
-        self.write_str(node.value.as_str().unwrap())
+        self._unparse_constant(&node.value);
     }
 
     fn unparse_pattern_match_sequence(&mut self, node: &PatternMatchSequence<TextRange>) {
