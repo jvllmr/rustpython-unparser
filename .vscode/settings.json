@@ -1,12 +1,9 @@
 {
-	"cSpell.words": [
-		"unparse",
-		"Unparser"
-	],
-	"editor.formatOnSave": true,
-	"[python]": {
-		"editor.defaultFormatter": "charliermarsh.ruff"
-	},
-	"python.defaultInterpreterPath": ".venv/bin/python",
-	"python.terminal.activateEnvInCurrentTerminal": true
+  "cSpell.words": ["unparse", "Unparser"],
+  "editor.formatOnSave": true,
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  },
+  "python.defaultInterpreterPath": ".venv/bin/python",
+  "python.terminal.activateEnvInCurrentTerminal": true
 }
