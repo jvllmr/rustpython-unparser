@@ -295,10 +295,12 @@ impl Unparser {
             self.write_str("]");
         }
 
-        self.write_str("(");
-
         let mut bases_iter = node.bases.iter().peekable();
         let mut keywords_iter = node.keywords.iter().peekable();
+        let has_parens = bases_iter.peek().is_some() || keywords_iter.peek().is_some();
+        if has_parens {
+            self.write_str("(");
+        }
 
         while let Some(base) = bases_iter.next() {
             self.unparse_expr(base);
@@ -312,7 +314,10 @@ impl Unparser {
                 self.write_str(", ");
             }
         }
-        self.write_str("):");
+        if has_parens {
+            self.write_str(")");
+        }
+        self.write_str(":");
 
         self.block(|block_self| {
             for value in &node.body {
@@ -359,7 +364,7 @@ impl Unparser {
     }
 
     fn unparse_stmt_type_alias(&mut self, node: &StmtTypeAlias<TextRange>) {
-        self.fill("");
+        self.fill("type ");
         self.unparse_expr(&node.name);
         if node.type_params.len() > 0 {
             self.write_str("[");
@@ -372,7 +377,7 @@ impl Unparser {
             }
             self.write_str("]");
         }
-        self.write_str(": ");
+        self.write_str(" = ");
         self.unparse_expr(&node.value);
     }
 
@@ -390,8 +395,8 @@ impl Unparser {
         self.unparse_expr(&node.target);
         self.write_str(": ");
         self.unparse_expr(&node.annotation);
-        self.write_str(" = ");
         if let Some(value) = &node.value {
+            self.write_str(" = ");
             self.unparse_expr(value);
         }
     }
