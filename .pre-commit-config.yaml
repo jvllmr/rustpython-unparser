@@ -8,6 +8,10 @@ repos:
     hooks:
       - id: cargo-fix
       - id: cargo-fmt
+  - repo: https://github.com/jvllmr/pre-commit-prettier
+    rev: v3.4.2
+    hooks:
+      - id: prettier
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: "v0.8.4"
     hooks:
@@ -15,4 +19,3 @@ repos:
         args:
           - --fix
       - id: ruff-format
-      
