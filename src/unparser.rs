@@ -1039,12 +1039,22 @@ impl Unparser {
             }
             Constant::Bytes(value) => {
                 let utf8 = String::from_utf8(value.to_owned());
-                self.write_str("b\"");
-                self.write_str(&utf8.unwrap());
-                self.write_str("\"");
+                self.write_str("b");
+                let escaped = rustpython_literal::escape::UnicodeEscape::new_repr(&utf8.unwrap())
+                    .str_repr()
+                    .to_string()
+                    .unwrap();
+                self.write_str(&escaped);
             }
             Constant::Int(value) => self.write_str(&value.to_string()),
-            Constant::Str(value) => self.write_str(&format!("\"{}\"", value)),
+            Constant::Str(value) => {
+                let escaped = rustpython_literal::escape::UnicodeEscape::new_repr(value)
+                    .str_repr()
+                    .to_string()
+                    .unwrap();
+
+                self.write_str(&escaped);
+            }
             Constant::None => self.write_str("None"),
             Constant::Complex { real, imag: _ } => self.write_str(&real.to_string()),
             Constant::Float(value) => self.write_str(&value.to_string()),
