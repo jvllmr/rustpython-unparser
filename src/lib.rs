@@ -5,9 +5,9 @@ pub use crate::unparser::Unparser;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
     use rustpython_ast::text_size::TextRange;
     use rustpython_ast::Fold;
-
     use rustpython_ast::TextSize;
     use rustpython_parser::ast::Suite;
     use rustpython_parser::Parse;
@@ -123,6 +123,7 @@ mod tests {
         }
 
         run_tests_on_folders("./fuzzy_test_files", "./fuzzy_test_files_unparsed")?;
+
         Ok(())
     }
 }
