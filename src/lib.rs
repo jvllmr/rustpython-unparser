@@ -40,6 +40,20 @@ mod tests {
     }
 
     fn run_tests_on_folders(source_folder: &str, results_folder: &str) -> io::Result<()> {
+        for entry in fs::read_dir(results_folder)? {
+            let entry = entry?;
+
+            let entry_path = entry.path();
+            if entry_path.is_file()
+                && entry_path.file_name().is_some_and(|name| {
+                    name.to_str()
+                        .is_some_and(|inner_name| inner_name.ends_with(".py"))
+                })
+            {
+                fs::remove_file(entry_path)?;
+            }
+        }
+
         for entry in fs::read_dir(source_folder)? {
             let entry = entry?;
 
