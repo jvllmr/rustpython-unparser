@@ -2,10 +2,15 @@
 name = "rustpython-unparser"
 version = "0.1.0"
 edition = "2021"
+authors = ["Jan Vollmer <jan@vllmr.dev>"]
+readme = "README.md"
+repository = "https://github.com/jvllmr/rustpython-unparser"
+description = "A complete unparser for RustPython ASTs"
+license-file = "LICENSE"
 
 [dependencies]
-rustpython-ast = { version = "0.4.0" }
-rustpython-literal = "0.4.0"
+rustpython-ast = { version = ">=0.4.0" }
+rustpython-literal = ">=0.4.0"
 
 [dev-dependencies]
 rustpython-parser = "0.4.0"
