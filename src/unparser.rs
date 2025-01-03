@@ -211,6 +211,7 @@ impl Unparser {
         }
         self.fill("def ");
         self.write_str(&node.name);
+
         if node.type_params.len() > 0 {
             self.write_str("[");
             let mut type_params_iter = node.type_params.iter().peekable();
@@ -407,6 +408,10 @@ impl Unparser {
         self.write_str(" in ");
         self.unparse_expr(&node.iter);
         self.write_str(":");
+        if let Some(type_comment) = &node.type_comment {
+            self.write_str(" #type: ignore");
+            self.write_str(type_comment);
+        }
         self.block(|block_self| {
             for value in &node.body {
                 block_self.unparse_stmt(value);
@@ -427,6 +432,10 @@ impl Unparser {
         self.write_str(" in ");
         self.unparse_expr(&node.iter);
         self.write_str(":");
+        if let Some(type_comment) = &node.type_comment {
+            self.write_str(" #type: ignore");
+            self.write_str(type_comment);
+        }
         self.block(|block_self| {
             for value in &node.body {
                 block_self.unparse_stmt(value);
