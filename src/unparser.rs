@@ -354,7 +354,7 @@ impl Unparser {
             });
 
             if targets_iter.peek().is_some() {
-                self.write_str(", ");
+                self.write_str(" = ");
             }
         }
         self.write_str(" = ");
