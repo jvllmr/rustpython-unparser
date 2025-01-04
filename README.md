@@ -4,7 +4,7 @@ A complete unparser for rustpython-parser ASTs.
 
 ## Acknowledgement
 
-I created this library because I quickly needed a way to turn rustpython-parser ASTs back to some form of Python source code. Since the unparser contained within rustpython-ast only supports expressions and not statements, I started implementing my own unparser by taking heavy inspiration from rustpython's unparser and the unparser in the python standard library. Therefore, most of credit goes to the teams behind the ast standard library module and the RustPython team. I only glued the parts I needed together to a complete unparser in this repository.
+I created this library because I quickly needed a way to turn rustpython-parser ASTs back to some form of Python source code. Since the unparser contained within rustpython-ast only supports expressions and not statements, I started implementing my own unparser by taking heavy inspiration from rustpython's unparser and the unparser in the python standard library. Therefore, most credit goes to the respective teams behind the ast standard library module and RustPython. I only glued the parts I needed together to a complete unparser in this repository.
 
 ## Contributing
 
@@ -18,7 +18,7 @@ If you would like to fix the issue yourself, you can create an example in one of
 use rustpython_unparser::Unparser;
 use rustpython_parser::ast::Suite;
 use rustpython_parser::Parse;
-use std::fs;
+
 fn main() {
     // ...
     let unparser = Unparser::new();
