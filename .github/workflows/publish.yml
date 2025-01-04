@@ -1,0 +1,22 @@
+name: Upload Python Package
+
+on:
+  release:
+    types: [published]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  deploy:
+    name: Upload to crates.io
+    runs-on: ubuntu-latest
+    environment:
+      name: crates.io
+      url: https://crates.io/crates/rustpython-unparser
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
