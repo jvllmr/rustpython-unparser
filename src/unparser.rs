@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use rustpython_ast::{
     text_size::TextRange, Alias, Arg, Arguments, BoolOp, CmpOp, Comprehension, ExceptHandler,
     ExceptHandlerExceptHandler, Expr, ExprAttribute, ExprAwait, ExprBinOp, ExprBoolOp, ExprCall,
@@ -16,6 +14,7 @@ use rustpython_ast::{
     UnaryOp, WithItem,
 };
 use rustpython_ast::{Constant, ConversionFlag, Int};
+use std::ops::Deref;
 
 enum Precedence {
     NamedExpr = 1,
@@ -1040,10 +1039,8 @@ impl Unparser {
                 }
             }
             Constant::Bytes(value) => {
-                let utf8 = String::from_utf8(value.to_owned());
-                self.write_str("b");
-                let escaped = rustpython_literal::escape::UnicodeEscape::new_repr(&utf8.unwrap())
-                    .str_repr()
+                let escaped = rustpython_literal::escape::AsciiEscape::new_repr(value)
+                    .bytes_repr()
                     .to_string()
                     .unwrap();
                 self.write_str(&escaped);
