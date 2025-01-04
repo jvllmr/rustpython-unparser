@@ -1,5 +1,9 @@
 # rustpython-unparser
 
+[![Crates.io Downloads (latest version)](https://img.shields.io/crates/dv/rustpython-unparser)](https://crates.io/crates/rustpython-unparser)
+[![Crates.io Version](https://img.shields.io/crates/v/rustpython-unparser)](https://crates.io/crates/rustpython-unparser)
+![CI Badge](https://github.com/jvllmr/rustpython-unparser/actions/workflows/test.yml/badge.svg)
+
 A complete unparser for rustpython-parser ASTs.
 
 ## Acknowledgement
