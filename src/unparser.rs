@@ -44,7 +44,6 @@ impl Precedence {
     }
 }
 
-#[allow(dead_code)]
 const EXPR_PRECEDENCE: usize = 9;
 
 fn get_precedence(node: &Expr<TextRange>) -> usize {
@@ -1080,7 +1079,9 @@ impl Unparser {
     }
     fn unparse_expr_starred(&mut self, node: &ExprStarred<TextRange>) {
         self.write_str("*");
-        self.unparse_expr(&node.value)
+        self.with_precedence_num(EXPR_PRECEDENCE, |prec_self| {
+            prec_self.unparse_expr(&node.value);
+        });
     }
 
     fn unparse_expr_name(&mut self, node: &ExprName<TextRange>) {
