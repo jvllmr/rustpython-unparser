@@ -1152,7 +1152,16 @@ impl Unparser {
         self.write_str(" in ");
         self.unparse_expr(&node.iter);
         for if_ in &node.ifs {
-            self.unparse_expr(if_);
+            self.write_str(" ");
+            match if_ {
+                Expr::Name(name) => {
+                    self.write_str("if ");
+                    self.write_str(&name.id);
+                }
+                _ => {
+                    self.unparse_expr(if_);
+                }
+            }
         }
     }
 
