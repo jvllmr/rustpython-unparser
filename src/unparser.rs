@@ -16,6 +16,8 @@ use rustpython_ast::{
 use rustpython_ast::{Constant, ConversionFlag, Int};
 use std::ops::Deref;
 
+use crate::utils::replace_first_and_last;
+
 enum Precedence {
     NamedExpr = 1,
     Tuple = 2,
@@ -986,6 +988,8 @@ impl Unparser {
             self.write_str("f");
         }
         let mut expr_source = String::new();
+
+        let mut formatted_values_sources: Vec<String> = Vec::new();
         for expr in node.values.iter() {
             let mut inner_unparser = Unparser::new();
             match expr {
@@ -996,22 +1000,50 @@ impl Unparser {
                     } else {
                         unreachable!()
                     }
+                    expr_source += inner_unparser.source.as_str();
+                }
+                Expr::FormattedValue(formatted) => {
+                    expr_source += &("{".to_owned()
+                        + formatted_values_sources.len().to_string().as_str()
+                        + "}");
+                    inner_unparser.unparse_expr_formatted_value(formatted);
+                    formatted_values_sources.push(inner_unparser.source);
                 }
                 _ => {
                     inner_unparser.unparse_expr(expr);
+                    expr_source += inner_unparser.source.as_str();
                 }
             }
-
-            expr_source += inner_unparser.source.as_str();
         }
 
         if is_spec {
+            for (i, formatted) in formatted_values_sources.iter().enumerate() {
+                let to_replace = "{".to_owned() + i.to_string().as_str() + "}";
+                expr_source = expr_source.replace(&to_replace, formatted)
+            }
             self.write_str(&expr_source);
         } else {
-            let escaped_source = rustpython_literal::escape::UnicodeEscape::new_repr(&expr_source)
-                .str_repr()
-                .to_string()
-                .unwrap();
+            let mut escaped_source =
+                rustpython_literal::escape::UnicodeEscape::new_repr(&expr_source)
+                    .str_repr()
+                    .to_string()
+                    .unwrap();
+            for (i, formatted) in formatted_values_sources.iter().enumerate() {
+                let to_replace = "{".to_owned() + i.to_string().as_str() + "}";
+                escaped_source = escaped_source.replace(&to_replace, formatted)
+            }
+
+            let has_single = escaped_source.contains("'");
+            let has_double = escaped_source.contains("\"");
+            let has_single_doc = escaped_source.contains("'''");
+            if has_single && has_double && has_single_doc {
+                escaped_source = replace_first_and_last(&escaped_source, "\"\"\"")
+            } else if has_single && has_double {
+                escaped_source = replace_first_and_last(&escaped_source, "'''")
+            } else if has_single {
+                escaped_source = replace_first_and_last(&escaped_source, "\"")
+            }
+
             self.write_str(&escaped_source);
         }
     }

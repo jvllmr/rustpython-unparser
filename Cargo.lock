@@ -419,6 +419,7 @@ checksum = "4cdaf8ee5c1473b993b398c174641d3aa9da847af36e8d5eb8291930b72f31a5"
 dependencies = [
  "is-macro",
  "malachite-bigint",
+ "rustpython-literal",
  "rustpython-parser-core",
  "static_assertions",
 ]
