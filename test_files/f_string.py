@@ -19,4 +19,5 @@ tag_attribs = " ".join(
         for (k, v) in attribs.items() # noqa
     )
 )
+completion_init_lines = [f"source '{completion_path}'"] # noqa
 # fmt: on

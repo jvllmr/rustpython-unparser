@@ -1035,10 +1035,18 @@ impl Unparser {
 
             let has_single = escaped_source.contains("'");
             let has_double = escaped_source.contains("\"");
-            let has_single_doc = escaped_source.contains("'''");
-            if has_single && has_double && has_single_doc {
+
+            if has_single
+                && has_double
+                && escaped_source.starts_with("\"")
+                && escaped_source.ends_with("\"")
+            {
                 escaped_source = replace_first_and_last(&escaped_source, "\"\"\"")
-            } else if has_single && has_double {
+            } else if has_single
+                && has_double
+                && escaped_source.starts_with("'")
+                && escaped_source.ends_with("'")
+            {
                 escaped_source = replace_first_and_last(&escaped_source, "'''")
             } else if has_single {
                 escaped_source = replace_first_and_last(&escaped_source, "\"")
