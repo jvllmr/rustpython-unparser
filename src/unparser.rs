@@ -1036,7 +1036,6 @@ impl Unparser {
             let has_single = escaped_source.contains("'");
             let has_double = escaped_source.contains("\"");
 
-
             if has_single
                 && has_double
                 && escaped_source.starts_with("\"")
