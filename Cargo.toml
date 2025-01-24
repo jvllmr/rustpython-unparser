@@ -1,6 +1,6 @@
 [package]
 name = "rustpython-unparser"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2021"
 authors = ["Jan Vollmer <jan@vllmr.dev>"]
 readme = "README.md"
