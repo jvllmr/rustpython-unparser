@@ -1,7 +1,8 @@
 pub mod unparser;
 mod utils;
 pub use crate::unparser::Unparser;
-
+#[cfg(feature = "transformer")]
+pub mod transformer;
 #[cfg(test)]
 mod tests {
     use super::*;

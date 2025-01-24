@@ -34,3 +34,7 @@ fn main() {
     // ...
 }
 ```
+
+# Transformer
+
+This crate also contains a transformer trait for easy transformation of ASTs with the possibility of removing nodes. Enable the `transformer` feature to use it. It is similar to rustpython-ast's visitor, with the difference that a visit functions always return `Option<...>` and statements/expressions are passed as mutable.

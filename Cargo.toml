@@ -9,6 +9,9 @@ description = "A complete unparser for RustPython ASTs"
 license-file = "LICENSE"
 rust-version = "1.72.1"
 
+[features]
+transformer = []
+
 [dependencies]
 rustpython-ast = { version = ">=0.4.0" }
 rustpython-literal = ">=0.4.0"
