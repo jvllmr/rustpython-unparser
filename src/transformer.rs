@@ -19,6 +19,19 @@ fn box_expr_option(expr: Option<Expr>) -> Option<Box<Expr>> {
 }
 #[allow(unused_mut)]
 pub trait Transformer {
+    #[allow(unused_variables)]
+    fn on_enter_annotation(&mut self, expr: &Expr) {}
+    #[allow(unused_variables)]
+    fn on_exit_annotation(&mut self, expr: &Option<Expr>) {}
+
+    fn visit_annotation(&mut self, expr: Box<Expr>) -> Option<Expr> {
+        let unboxed_annotation = *expr;
+        self.on_enter_annotation(&unboxed_annotation);
+        let new_annotation = self.visit_expr(unboxed_annotation);
+        self.on_exit_annotation(&new_annotation);
+        new_annotation
+    }
+
     fn visit_stmt_vec(&mut self, stmts: Vec<Stmt>) -> Vec<Stmt> {
         let mut new_stmts: Vec<Stmt> = Vec::new();
 
@@ -741,7 +754,7 @@ pub trait Transformer {
         stmt.decorator_list = self.visit_expr_vec(stmt.decorator_list);
         stmt.args = Box::new(self.visit_arguments(*stmt.args));
         if let Some(returns) = stmt.returns {
-            stmt.returns = box_expr_option(self.visit_expr(*returns));
+            stmt.returns = box_expr_option(self.visit_annotation(returns));
         }
         stmt.body = self.visit_stmt_vec(stmt.body);
         if stmt.body.len() == 0 {
@@ -765,7 +778,7 @@ pub trait Transformer {
         stmt.decorator_list = self.visit_expr_vec(stmt.decorator_list);
         stmt.args = Box::new(self.visit_arguments(*stmt.args));
         if let Some(returns) = stmt.returns {
-            stmt.returns = box_expr_option(self.visit_expr(*returns));
+            stmt.returns = box_expr_option(self.visit_annotation(returns));
         }
         stmt.body = self.visit_stmt_vec(stmt.body);
         if stmt.body.len() == 0 {
@@ -822,7 +835,7 @@ pub trait Transformer {
 
     fn generic_visit_ann_assign(&mut self, mut stmt: StmtAnnAssign) -> Option<StmtAnnAssign> {
         stmt.annotation = Box::new(
-            self.visit_expr(*stmt.annotation)
+            self.visit_annotation(stmt.annotation)
                 .expect("Cannot remove annotation from annotated assignment"),
         );
 
@@ -1368,7 +1381,7 @@ pub trait Transformer {
 
     fn generic_visit_arg(&mut self, mut arg: Arg) -> Option<Arg> {
         if let Some(annotation) = arg.annotation {
-            arg.annotation = box_expr_option(self.visit_expr(*annotation));
+            arg.annotation = box_expr_option(self.visit_annotation(annotation));
         }
         return Some(arg);
     }
@@ -1476,7 +1489,7 @@ pub trait Transformer {
         mut param_var: TypeParamTypeVar,
     ) -> Option<TypeParamTypeVar> {
         if let Some(bound) = param_var.bound {
-            param_var.bound = box_expr_option(self.visit_expr(*bound));
+            param_var.bound = box_expr_option(self.visit_annotation(bound));
         }
         Some(param_var)
     }
