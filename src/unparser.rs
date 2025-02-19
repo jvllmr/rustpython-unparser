@@ -1057,6 +1057,7 @@ impl Unparser {
     }
 
     fn _unparse_constant(&mut self, constant: &Constant) {
+        let inf_str = "1e309";
         return match constant {
             Constant::Tuple(values) => {
                 self.write_str("(");
@@ -1094,8 +1095,37 @@ impl Unparser {
                 self.write_str(&escaped);
             }
             Constant::None => self.write_str("None"),
-            Constant::Complex { real, imag: _ } => self.write_str(&real.to_string()),
-            Constant::Float(value) => self.write_str(&value.to_string()),
+            Constant::Complex { real, imag } => {
+                if real.is_infinite() || imag.is_infinite() {
+                    self.write_str(&constant.to_string().replace("inf", &inf_str));
+                } else {
+                    self.write_str(&constant.to_string());
+                }
+            }
+            Constant::Float(value) => {
+                if value.is_infinite() {
+                    self.write_str(inf_str);
+                } else {
+                    let mut str_value = value.to_string();
+                    if value.fract() == 0.0 {
+                        let mut trailing_zeroes = 0;
+                        while str_value.ends_with("0") {
+                            str_value.pop();
+                            trailing_zeroes += 1;
+                        }
+                        str_value = format!("{}e{}", str_value, trailing_zeroes);
+                    } else if str_value.starts_with(&format!("0.{}", "0".repeat(5))) {
+                        let mut trimmed = str_value[2..].to_owned();
+                        let mut factor = 1;
+                        while trimmed.starts_with("0") {
+                            trimmed = trimmed[1..].to_owned();
+                            factor += 1;
+                        }
+                        str_value = format!("{}e-{}", trimmed, factor);
+                    }
+                    self.write_str(&str_value);
+                }
+            }
         };
     }
 
