@@ -1142,7 +1142,9 @@ impl Unparser {
         self.write_str(&node.attr);
     }
     fn unparse_expr_subscript(&mut self, node: &ExprSubscript<TextRange>) {
-        self.unparse_expr(&node.value);
+        self.with_precedence(Precedence::Atom, |prec_self| {
+            prec_self.unparse_expr(&node.value);
+        });
         self.write_str("[");
         self.unparse_expr(&node.slice);
         self.write_str("]");
