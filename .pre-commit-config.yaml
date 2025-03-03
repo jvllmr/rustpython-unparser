@@ -9,11 +9,11 @@ repos:
       - id: cargo-fix
       - id: cargo-fmt
   - repo: https://github.com/jvllmr/pre-commit-prettier
-    rev: v3.5.0
+    rev: v3.5.3
     hooks:
       - id: prettier
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: "v0.9.6"
+    rev: "v0.9.9"
     hooks:
       - id: ruff
         args:
