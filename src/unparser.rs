@@ -789,11 +789,15 @@ impl Unparser {
     fn unparse_expr_if_exp(&mut self, node: &ExprIfExp<TextRange>) {
         let enum_member = Expr::IfExp(node.to_owned());
         self.delimit_precedence(&enum_member, |block_self| {
-            block_self.unparse_expr(&node.body);
-            block_self.write_str(" if ");
-            block_self.unparse_expr(&node.test);
-            block_self.write_str(" else ");
-            block_self.unparse_expr(&node.orelse);
+            block_self.with_precedence_num(Precedence::Test.value() + 1, |prec_self| {
+                prec_self.unparse_expr(&node.body);
+                prec_self.write_str(" if ");
+                prec_self.unparse_expr(&node.test);
+            });
+            block_self.with_precedence(Precedence::Test, |prec_self| {
+                prec_self.write_str(" else ");
+                prec_self.unparse_expr(&node.orelse);
+            });
         })
     }
 
@@ -811,7 +815,10 @@ impl Unparser {
                     self.write_str("**");
                 }
             }
-            self.unparse_expr(value);
+            self.with_precedence_num(EXPR_PRECEDENCE, |prec_self| {
+                prec_self.unparse_expr(value);
+            });
+
             if zipped.peek().is_some() {
                 self.write_str(", ");
             }
@@ -1173,14 +1180,21 @@ impl Unparser {
 
     fn unparse_expr_tuple(&mut self, node: &ExprTuple<TextRange>) {
         let mut elts_iter = node.elts.iter().peekable();
-        self.write_str("(");
+        let should_delimit =
+            node.elts.len() == 0 || self.precedence_level > Precedence::Tuple.value();
+        if should_delimit {
+            self.write_str("(");
+        }
+
         while let Some(expr) = elts_iter.next() {
             self.unparse_expr(expr);
             if elts_iter.peek().is_some() || node.elts.len() == 1 {
                 self.write_str(", ");
             }
         }
-        self.write_str(")");
+        if should_delimit {
+            self.write_str(")");
+        }
     }
 
     fn unparse_expr_slice(&mut self, node: &ExprSlice<TextRange>) {
@@ -1221,13 +1235,19 @@ impl Unparser {
         } else {
             self.write_str(" for ");
         }
-        self.unparse_expr(&node.target);
+        self.with_precedence(Precedence::Tuple, |prec_self| {
+            prec_self.unparse_expr(&node.target);
+        });
+
         self.write_str(" in ");
-        self.unparse_expr(&node.iter);
-        for if_ in &node.ifs {
-            self.write_str(" if ");
-            self.unparse_expr(if_);
-        }
+
+        self.with_precedence_num(Precedence::Test.value() + 1, |prec_self| {
+            prec_self.unparse_expr(&node.iter);
+            for if_ in &node.ifs {
+                prec_self.write_str(" if ");
+                prec_self.unparse_expr(if_);
+            }
+        });
     }
 
     fn unparse_excepthandler(&mut self, node: &ExceptHandler<TextRange>) {
