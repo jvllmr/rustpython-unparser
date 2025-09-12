@@ -10,6 +10,9 @@ A complete unparser for rustpython-parser ASTs.
 
 I created this library because I quickly needed a way to turn rustpython-parser ASTs back to some form of Python source code. Since the unparser contained within rustpython-ast only supports expressions and not statements, I started implementing my own unparser by taking heavy inspiration from rustpython's unparser and the unparser in the python standard library. Therefore, most credit goes to the respective teams behind the ast standard library module and RustPython. I only glued the parts I needed together to a complete unparser in this repository.
 
+I personally don't use this crate anymore since I switched over to using the ruff's internal AST, but I will still accept PRs.
+Feel free to contribute if you find out that you are missing something.
+
 ## Contributing
 
 You can already help a lot by reporting issues with generated code. If you find an issue,please provide example code of the original source and the unparsed source with a concise explanation.
@@ -35,6 +38,6 @@ fn main() {
 }
 ```
 
-# Transformer
+## Transformer
 
 This crate also contains a transformer trait for easy transformation of ASTs with the possibility of removing nodes. Enable the `transformer` feature to use it. It is similar to rustpython-ast's visitor, with the difference that a visit functions always return `Option<...>` and statements/expressions are passed as mutable.
