@@ -8,5 +8,12 @@
     ":automergeMinor"
   ],
   "labels": ["dependencies"],
-  "rangeStrategy": "bump"
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {
+      "description": "Do not update requires-python",
+      "matchDepTypes": ["requires-python"],
+      "enabled": false
+    }
+  ]
 }
