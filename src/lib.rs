@@ -7,6 +7,7 @@ pub mod transformer;
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+    use rand::Rng;
     use rustpython_ast::text_size::TextRange;
     use rustpython_ast::Fold;
     use rustpython_ast::TextSize;
@@ -108,7 +109,7 @@ mod tests {
     #[test]
     #[ignore = "Fuzzy tests are unstable and should only be used to explore new test cases"]
     fn test_fuzzy_files() -> io::Result<()> {
-        let seed = rand::random::<usize>();
+        let seed: u64 = rand::rng().random();
 
         for i in 0..10 {
             let file_name = format!("./fuzzy_test_files/fuzzy_test{}.py", i);
