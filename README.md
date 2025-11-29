@@ -10,7 +10,7 @@ A complete unparser for rustpython-parser ASTs.
 
 I created this library because I quickly needed a way to turn rustpython-parser ASTs back to some form of Python source code. Since the unparser contained within rustpython-ast only supports expressions and not statements, I started implementing my own unparser by taking heavy inspiration from rustpython's unparser and the unparser in the python standard library. Therefore, most credit goes to the respective teams behind the ast standard library module and RustPython. I only glued the parts I needed together to a complete unparser in this repository.
 
-I personally don't use this crate anymore since I switched over to using the ruff's internal AST, but I will still accept PRs.
+I personally don't use this crate anymore since I switched over to using ruff's internal AST, but I will still accept PRs.
 Feel free to contribute if you find out that you are missing something.
 
 ## Contributing
