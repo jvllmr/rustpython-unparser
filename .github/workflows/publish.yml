@@ -16,7 +16,7 @@ jobs:
       name: crates.io
       url: https://crates.io/crates/rustpython-unparser
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Publish
         run: cargo publish
         env:
