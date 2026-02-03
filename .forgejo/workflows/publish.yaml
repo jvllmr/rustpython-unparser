@@ -17,6 +17,10 @@ jobs:
       url: https://crates.io/crates/rustpython-unparser
     steps:
       - uses: https://github.com/actions/checkout@v6
+      - name: Install cargo
+        run: |
+          apt-get update
+          apt-get install cargo
       - name: Publish
         run: cargo publish
         env:
