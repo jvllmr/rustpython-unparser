@@ -15,6 +15,7 @@ jobs:
       image: ghcr.io/catthehacker/ubuntu:rust-latest
     steps:
       - uses: https://github.com/actions/checkout@v6
+      - uses: https://github.com/Swatinem/rust-cache@v2.8.2
       - name: Build
         run: cargo build --verbose
       - name: Run tests
