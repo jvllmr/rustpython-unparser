@@ -11,7 +11,7 @@ env:
 jobs:
   deploy:
     name: Upload to crates.io
-    runs-on: ubuntu-latest
+    runs-on: codeberg-small
     environment:
       name: crates.io
       url: https://crates.io/crates/rustpython-unparser
