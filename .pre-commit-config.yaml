@@ -1,10 +1,10 @@
-ci:
-  skip:
-    - cargo-fix
-
 repos:
-  - repo: https://github.com/jvllmr/pre-commit-cargo
-    rev: c8489ddc7d198af94135f31c3a70cf708e98f069
+  - repo: https://code.forgejo.org/forgejo/runner
+    rev: v11.1.1
+    hooks:
+      - id: forgejo-runner-validate
+  - repo: https://github.com/AndrejOrsula/pre-commit-cargo
+    rev: "0.5.0"
     hooks:
       - id: cargo-fix
       - id: cargo-fmt

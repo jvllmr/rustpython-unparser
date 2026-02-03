@@ -1,0 +1,20 @@
+name: Lint
+
+on:
+  push:
+    branches: ["dev"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  pre-commit:
+    name: pre-commit-lite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://github.com/actions/checkout@v6
+      - uses: pre-commit-ci/lite-action@v1.1.0
+        if: always()
+        with:
+          msg: apply code formatting
