@@ -2,7 +2,7 @@
 
 [![Crates.io Downloads (latest version)](https://img.shields.io/crates/dv/rustpython-unparser)](https://crates.io/crates/rustpython-unparser)
 [![Crates.io Version](https://img.shields.io/crates/v/rustpython-unparser)](https://crates.io/crates/rustpython-unparser)
-![CI Badge](https://github.com/jvllmr/rustpython-unparser/actions/workflows/test.yml/badge.svg)
+![CI Badge](https://codeberg.org/jvllmr/rustpython-unparser/badges/workflows/test.yaml/badge.svg)
 
 A complete unparser for rustpython-parser ASTs.
 
