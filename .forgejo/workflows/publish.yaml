@@ -20,7 +20,7 @@ jobs:
       - name: Install cargo
         run: |
           apt-get update
-          apt-get install cargo
+          apt-get install -y cargo
       - name: Publish
         run: cargo publish
         env:
