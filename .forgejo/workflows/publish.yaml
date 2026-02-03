@@ -14,9 +14,9 @@ jobs:
     runs-on: codeberg-small
     container:
       image: ghcr.io/catthehacker/ubuntu:rust-latest
-    environment:
-      name: crates.io
-      url: https://crates.io/crates/rustpython-unparser
+    #environment:
+    #  name: crates.io
+    #  url: https://crates.io/crates/rustpython-unparser
     steps:
       - uses: https://github.com/actions/checkout@v6
       - uses: https://github.com/Swatinem/rust-cache@v2.8.2
