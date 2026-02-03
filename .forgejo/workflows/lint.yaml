@@ -10,12 +10,10 @@ jobs:
   pre-commit:
     name: pre-commit-lite
     runs-on: codeberg-small
+    container:
+      image: ghcr.io/catthehacker/ubuntu:rust-latest
     steps:
       - uses: https://github.com/actions/checkout@v6
-      - name: Install cargo
-        run: |
-          apt-get update
-          apt-get install -y cargo
       - uses: https://github.com/pre-commit-ci/lite-action@v1.1.0
         if: always()
         with:

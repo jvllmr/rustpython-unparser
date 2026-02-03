@@ -11,13 +11,10 @@ env:
 jobs:
   build:
     runs-on: codeberg-small
-
+    container:
+      image: ghcr.io/catthehacker/ubuntu:rust-latest
     steps:
       - uses: https://github.com/actions/checkout@v6
-      - name: Install cargo
-        run: |
-          apt-get update
-          apt-get install -y cargo
       - name: Build
         run: cargo build --verbose
       - name: Run tests

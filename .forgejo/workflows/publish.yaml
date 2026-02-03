@@ -12,15 +12,13 @@ jobs:
   deploy:
     name: Upload to crates.io
     runs-on: codeberg-small
+    container:
+      image: ghcr.io/catthehacker/ubuntu:rust-latest
     environment:
       name: crates.io
       url: https://crates.io/crates/rustpython-unparser
     steps:
       - uses: https://github.com/actions/checkout@v6
-      - name: Install cargo
-        run: |
-          apt-get update
-          apt-get install -y cargo
       - name: Publish
         run: cargo publish
         env:
