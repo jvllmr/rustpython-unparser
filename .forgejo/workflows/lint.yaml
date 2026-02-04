@@ -11,11 +11,11 @@ jobs:
     name: pre-commit-lite
     runs-on: codeberg-small
     container:
-      image: ghcr.io/catthehacker/ubuntu:rust-latest
+      image: ghcr.io/catthehacker/ubuntu:rust-latest@sha256:e98ef827ad2c282c202d172d5dab065760dc536affbd73554c503b334dbaaec8
     steps:
-      - uses: https://github.com/actions/checkout@v6
-      - uses: https://github.com/Swatinem/rust-cache@v2.8.2
-      - uses: https://github.com/pre-commit-ci/lite-action@v1.1.0
+      - uses: https://github.com/actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: https://github.com/Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: https://github.com/pre-commit-ci/lite-action@5d6cc0eb514c891a40562a58a8e71576c5c7fb43 # v1.1.0
         if: always()
         with:
           msg: apply code formatting
