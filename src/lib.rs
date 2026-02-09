@@ -7,7 +7,8 @@ pub mod transformer;
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use rand::Rng;
+
+    use rand::RngExt;
     use rustpython_ast::text_size::TextRange;
     use rustpython_ast::Fold;
     use rustpython_ast::TextSize;
