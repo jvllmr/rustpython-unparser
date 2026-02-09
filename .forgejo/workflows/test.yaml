@@ -10,7 +10,7 @@ env:
 
 jobs:
   build:
-    runs-on: codeberg-small
+    runs-on: docker
     container:
       image: ghcr.io/catthehacker/ubuntu:rust-latest@sha256:e98ef827ad2c282c202d172d5dab065760dc536affbd73554c503b334dbaaec8
     steps:
