@@ -11,9 +11,7 @@ env:
 jobs:
   deploy:
     name: Upload to crates.io
-    runs-on: docker
-    container:
-      image: ghcr.io/catthehacker/ubuntu:rust-latest@sha256:e98ef827ad2c282c202d172d5dab065760dc536affbd73554c503b334dbaaec8
+    runs-on: rust
     #environment:
     #  name: crates.io
     #  url: https://crates.io/crates/rustpython-unparser
