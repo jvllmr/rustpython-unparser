@@ -601,7 +601,7 @@ dependencies = [
 
 [[package]]
 name = "rustpython-unparser"
-version = "0.2.7"
+version = "0.2.6"
 dependencies = [
  "pretty_assertions",
  "rand 0.10.1",
