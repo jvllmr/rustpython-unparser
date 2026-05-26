@@ -1,20 +1,21 @@
 [package]
 name = "rustpython-unparser"
 version = "0.2.6"
-edition = "2021"
+edition = "2024"
 authors = ["Jan Vollmer <jan@vllmr.dev>"]
 readme = "README.md"
 repository = "https://codeberg.org/jvllmr/rustpython-unparser"
 description = "A complete unparser for RustPython ASTs"
 license-file = "LICENSE"
-rust-version = "1.72.1"
+rust-version = "1.93.0"
 
 [features]
 transformer = []
 
 [dependencies]
 rustpython-ast = { version = ">=0.4.0", features = ["rustpython-literal"] }
-rustpython-literal = ">=0.4.0"
+rustpython-literal = ">=0.5.0"
+rustpython-wtf8 = ">=0.5.0"
 
 [dev-dependencies]
 rustpython-parser = "=0.4.0"

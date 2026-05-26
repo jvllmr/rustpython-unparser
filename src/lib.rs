@@ -9,11 +9,11 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use rand::RngExt;
-    use rustpython_ast::text_size::TextRange;
     use rustpython_ast::Fold;
     use rustpython_ast::TextSize;
-    use rustpython_parser::ast::Suite;
+    use rustpython_ast::text_size::TextRange;
     use rustpython_parser::Parse;
+    use rustpython_parser::ast::Suite;
 
     use std::fs;
     use std::io;

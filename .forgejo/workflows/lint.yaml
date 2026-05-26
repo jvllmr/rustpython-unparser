@@ -13,4 +13,4 @@ jobs:
     steps:
       - uses: https://github.com/actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: https://github.com/Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - uses: https://github.com/j178/prek-action@79f765515bd648eb4d6bb1b17277b7cb22cb6468 # v2.0.0
+      - uses: https://github.com/j178/prek-action@bdca6f102f98e2b4c7029491a53dfd366469e33d # v2.0.4

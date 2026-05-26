@@ -1,17 +1,17 @@
 use rustpython_ast::{
-    text_size::TextRange, Alias, Arg, Arguments, BoolOp, CmpOp, Comprehension, ExceptHandler,
-    ExceptHandlerExceptHandler, Expr, ExprAttribute, ExprAwait, ExprBinOp, ExprBoolOp, ExprCall,
-    ExprCompare, ExprConstant, ExprDict, ExprDictComp, ExprFormattedValue, ExprGeneratorExp,
-    ExprIfExp, ExprJoinedStr, ExprLambda, ExprList, ExprListComp, ExprName, ExprNamedExpr, ExprSet,
-    ExprSetComp, ExprSlice, ExprStarred, ExprSubscript, ExprTuple, ExprUnaryOp, ExprYield,
-    ExprYieldFrom, Keyword, MatchCase, Operator, Pattern, PatternMatchAs, PatternMatchClass,
-    PatternMatchMapping, PatternMatchOr, PatternMatchSequence, PatternMatchSingleton,
-    PatternMatchStar, PatternMatchValue, Stmt, StmtAnnAssign, StmtAssert, StmtAssign, StmtAsyncFor,
+    Alias, Arg, Arguments, BoolOp, CmpOp, Comprehension, ExceptHandler, ExceptHandlerExceptHandler,
+    Expr, ExprAttribute, ExprAwait, ExprBinOp, ExprBoolOp, ExprCall, ExprCompare, ExprConstant,
+    ExprDict, ExprDictComp, ExprFormattedValue, ExprGeneratorExp, ExprIfExp, ExprJoinedStr,
+    ExprLambda, ExprList, ExprListComp, ExprName, ExprNamedExpr, ExprSet, ExprSetComp, ExprSlice,
+    ExprStarred, ExprSubscript, ExprTuple, ExprUnaryOp, ExprYield, ExprYieldFrom, Keyword,
+    MatchCase, Operator, Pattern, PatternMatchAs, PatternMatchClass, PatternMatchMapping,
+    PatternMatchOr, PatternMatchSequence, PatternMatchSingleton, PatternMatchStar,
+    PatternMatchValue, Stmt, StmtAnnAssign, StmtAssert, StmtAssign, StmtAsyncFor,
     StmtAsyncFunctionDef, StmtAsyncWith, StmtAugAssign, StmtBreak, StmtClassDef, StmtContinue,
     StmtDelete, StmtExpr, StmtFor, StmtFunctionDef, StmtGlobal, StmtIf, StmtImport, StmtImportFrom,
     StmtMatch, StmtNonlocal, StmtPass, StmtRaise, StmtReturn, StmtTry, StmtTryStar, StmtTypeAlias,
     StmtWhile, StmtWith, TypeParam, TypeParamParamSpec, TypeParamTypeVar, TypeParamTypeVarTuple,
-    UnaryOp, WithItem,
+    UnaryOp, WithItem, text_size::TextRange,
 };
 use rustpython_ast::{Constant, ConversionFlag, Int};
 use std::ops::Deref;
@@ -1030,11 +1030,12 @@ impl Unparser {
             }
             self.write_str(&expr_source);
         } else {
-            let mut escaped_source =
-                rustpython_literal::escape::UnicodeEscape::new_repr(&expr_source)
-                    .str_repr()
-                    .to_string()
-                    .unwrap();
+            let mut escaped_source = rustpython_literal::escape::UnicodeEscape::new_repr(
+                rustpython_wtf8::Wtf8::new(expr_source.as_str()),
+            )
+            .str_repr()
+            .to_string()
+            .unwrap();
             for (i, formatted) in formatted_values_sources.iter().enumerate() {
                 let to_replace = "{".to_owned() + i.to_string().as_str() + "}";
                 escaped_source = escaped_source.replace(&to_replace, formatted)
@@ -1094,10 +1095,12 @@ impl Unparser {
             }
             Constant::Int(value) => self.write_str(&value.to_string()),
             Constant::Str(value) => {
-                let escaped = rustpython_literal::escape::UnicodeEscape::new_repr(value)
-                    .str_repr()
-                    .to_string()
-                    .unwrap();
+                let escaped = rustpython_literal::escape::UnicodeEscape::new_repr(
+                    rustpython_wtf8::Wtf8::new(value.as_str()),
+                )
+                .str_repr()
+                .to_string()
+                .unwrap();
 
                 self.write_str(&escaped);
             }

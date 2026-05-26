@@ -1,5 +1,5 @@
 use rustpython_ast::{
-    text_size::TextRange, Alias, Arg, ArgWithDefault, Arguments, Comprehension, ExceptHandler,
+    Alias, Arg, ArgWithDefault, Arguments, Comprehension, ExceptHandler,
     ExceptHandlerExceptHandler, Expr, ExprAttribute, ExprAwait, ExprBinOp, ExprBoolOp, ExprCall,
     ExprCompare, ExprConstant, ExprDict, ExprDictComp, ExprFormattedValue, ExprGeneratorExp,
     ExprIfExp, ExprJoinedStr, ExprLambda, ExprList, ExprListComp, ExprName, ExprNamedExpr, ExprSet,
@@ -11,7 +11,7 @@ use rustpython_ast::{
     StmtDelete, StmtExpr, StmtFor, StmtFunctionDef, StmtGlobal, StmtIf, StmtImport, StmtImportFrom,
     StmtMatch, StmtNonlocal, StmtPass, StmtRaise, StmtReturn, StmtTry, StmtTryStar, StmtTypeAlias,
     StmtWhile, StmtWith, TypeParam, TypeParamParamSpec, TypeParamTypeVar, TypeParamTypeVarTuple,
-    WithItem,
+    WithItem, text_size::TextRange,
 };
 
 fn box_expr_option(expr: Option<Expr>) -> Option<Box<Expr>> {
